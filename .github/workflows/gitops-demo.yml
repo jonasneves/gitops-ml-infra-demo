@@ -171,6 +171,13 @@ jobs:
 
           echo "✅ Repository registered with ArgoCD"
 
+      - name: 🔐 Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: 🐳 Setup Docker image in Minikube
         run: |
           echo "Pulling Docker image from GHCR..."
@@ -379,6 +386,13 @@ jobs:
 
           echo "✅ Repository registered with ArgoCD"
 
+      - name: 🔐 Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: 🐳 Setup Docker image in Minikube
         run: |
           echo "Pulling Docker image from GHCR..."
@@ -529,6 +543,13 @@ jobs:
             --upsert
 
           echo "✅ Repository registered with ArgoCD"
+
+      - name: 🔐 Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 🐳 Setup Docker image in Minikube
         run: |
