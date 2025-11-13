@@ -69,22 +69,23 @@ Build Job (8 min)
     ├─ Push to GHCR
     └─ Store artifacts
          │
-         ├──────────────┬──────────────┐
-         │              │              │
-    Deploy Job     Test Job      Demo Job
-    (5 min)        (3 min)       (2 min)
-         │              │              │
-    ├─ Minikube    ├─ Health     ├─ Self-healing
-    ├─ ArgoCD      ├─ API tests  └─ Drift detection
-    └─ Sync apps   └─ Metrics
-         │              │              │
-         └──────────────┴──────────────┘
-                      │
-                 Report Job
-                 (1 min)
+         ├──────────────┬──────────────┬──────────────┐
+         │              │              │              │
+    Deploy Job     Test Job      Demo Job     Dashboard Job
+    (5 min)        (3 min)       (2 min)      (15 min)
+         │              │              │              │
+    ├─ Minikube    ├─ Health     ├─ Self-heal ├─ Minikube
+    ├─ ArgoCD      ├─ API tests  ├─ Drift det ├─ ArgoCD
+    └─ Sync apps   └─ Metrics    └─ Validate  ├─ Dashboard
+                                                └─ Public URL
+         │              │              │              │
+         └──────────────┴──────────────┴──────────────┘
+                                │
+                           Report Job
+                            (1 min)
 ```
 
-Jobs are parallelized where possible, with deploy/test/demo running concurrently after the build completes.
+Jobs run in parallel after build completion. Dashboard job provides real-time public monitoring via Cloudflare Tunnel.
 
 ## Technical Implementation
 
@@ -167,9 +168,8 @@ argocd app create ml-inference \
 ```
 .
 ├── .github/workflows/
-│   ├── gitops-demo.yml                # Main parallelized GitOps workflow
-│   ├── live-gitops-dashboard.yml      # Real-time deployment dashboard
-│   ├── cloudflare-tunnel-demo.yml     # Public service exposure
+│   ├── gitops-demo.yml                # Main parallelized GitOps workflow with dashboard
+│   ├── live-gitops-dashboard.yml      # Standalone real-time deployment dashboard
 │   └── debug-ssh-access.yml           # Interactive debugging via SSH
 │
 ├── app/ml-inference/
@@ -190,7 +190,6 @@ argocd app create ml-inference \
 ├── docs/
 │   ├── WORKFLOW-ARCHITECTURE.md       # CI/CD pipeline design
 │   ├── LIVE-DASHBOARD.md              # Real-time monitoring setup
-│   ├── CLOUDFLARE-TUNNEL.md           # Public exposure guide
 │   └── DEBUG-WORKFLOW.md              # SSH debugging documentation
 │
 └── README.md
@@ -274,29 +273,10 @@ curl -X POST http://localhost:8000/predict \
 
 ### Live GitOps Dashboard
 
-Real-time monitoring dashboard that streams deployment progress via Server-Sent Events (SSE):
+Real-time monitoring dashboard streaming deployment progress via Server-Sent Events. The main workflow includes an integrated dashboard job that provides a public URL (via Cloudflare Tunnel) for observing ArgoCD sync status, Kubernetes pod lifecycle, and deployment progress in real-time.
 
-- Progress tracking (0-100%) with phase detection
-- ArgoCD application sync status
-- Kubernetes pod lifecycle monitoring
-- Live event stream
-- Interactive API testing buttons
-- Public URL via Cloudflare Tunnel
-
-**Workflow:** `.github/workflows/live-gitops-dashboard.yml`
-**Documentation:** [docs/LIVE-DASHBOARD.md](docs/LIVE-DASHBOARD.md)
-
-### Cloudflare Tunnel Demo
-
-Exposes services to the public internet without infrastructure setup:
-
-- Zero-configuration public URLs
-- ML inference API exposure
-- Static demo website hosting
-- No Cloudflare account required
-
-**Workflow:** `.github/workflows/cloudflare-tunnel-demo.yml`
-**Documentation:** [docs/CLOUDFLARE-TUNNEL.md](docs/CLOUDFLARE-TUNNEL.md)
+**Standalone Workflow:** `.github/workflows/live-gitops-dashboard.yml`
+**Integrated:** Available as parallel job in main `gitops-demo.yml` workflow
 
 ### Debug SSH Access
 
@@ -326,7 +306,6 @@ Interactive debugging via tmate for troubleshooting:
 
 - **[Workflow Architecture](docs/WORKFLOW-ARCHITECTURE.md)** - CI/CD pipeline design and parallelization
 - **[Live Dashboard](docs/LIVE-DASHBOARD.md)** - Real-time deployment monitoring
-- **[Cloudflare Tunnel](docs/CLOUDFLARE-TUNNEL.md)** - Public service exposure
 - **[Debug Workflow](docs/DEBUG-WORKFLOW.md)** - SSH-based debugging
 
 ## License
