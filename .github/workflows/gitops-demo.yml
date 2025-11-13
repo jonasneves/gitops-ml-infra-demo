@@ -107,7 +107,7 @@ jobs:
         run: |
           echo "=== Cluster Info ==="
           kubectl cluster-info
-          kubectl version --short
+          kubectl version
 
           echo -e "\n=== Nodes ==="
           kubectl get nodes -o wide
