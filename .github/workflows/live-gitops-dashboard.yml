@@ -330,6 +330,9 @@ jobs:
               app.run(host='0.0.0.0', port=8080, debug=False)
           EOF
 
+          # Strip leading whitespace from Python file
+          sed -i 's/^          //' /tmp/dashboard_server.py
+
           echo "✅ Dashboard server created"
 
       - name: 🎬 Start deployment and dashboard
