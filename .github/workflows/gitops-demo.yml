@@ -354,6 +354,18 @@ jobs:
           sleep 5
           argocd login localhost:8080 --username admin --password $ARGOCD_PASSWORD --insecure
 
+      - name: 📦 Register Git repository with ArgoCD
+        run: |
+          echo "Registering repository with ArgoCD..."
+
+          argocd repo add https://github.com/${{ github.repository }}.git \
+            --username ${{ github.actor }} \
+            --password ${{ secrets.GITHUB_TOKEN }} \
+            --insecure-skip-server-verification \
+            --upsert
+
+          echo "✅ Repository registered with ArgoCD"
+
       - name: 🚀 Deploy applications
         run: |
           kubectl create namespace ml-inference || true
@@ -455,11 +467,9 @@ jobs:
       - name: ☸️ Start Minikube cluster
         uses: medyagh/setup-minikube@latest
         with:
-          minikube-version: ${{ env.MINIKUBE_VERSION }}
-          kubernetes-version: ${{ env.KUBERNETES_VERSION }}
+          driver: docker
           cpus: 2
           memory: 4096
-          driver: docker
 
       - name: 📦 Install ArgoCD
         run: |
@@ -481,6 +491,18 @@ jobs:
           sudo mv argocd /usr/local/bin/
 
           argocd login localhost:8080 --username admin --password $ARGOCD_PASSWORD --insecure
+
+      - name: 📦 Register Git repository with ArgoCD
+        run: |
+          echo "Registering repository with ArgoCD..."
+
+          argocd repo add https://github.com/${{ github.repository }}.git \
+            --username ${{ github.actor }} \
+            --password ${{ secrets.GITHUB_TOKEN }} \
+            --insecure-skip-server-verification \
+            --upsert
+
+          echo "✅ Repository registered with ArgoCD"
 
       - name: 🚀 Deploy ML Inference
         run: |
