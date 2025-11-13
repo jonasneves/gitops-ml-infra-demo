@@ -1023,7 +1023,7 @@ jobs:
           - ✅ **ArgoCD GitOps deployment** - Declarative, Git-driven infrastructure
           - ✅ **Kubernetes orchestration** - Multi-service deployment on Minikube
           - ✅ **ML Model Serving** - FastAPI inference service with sentiment analysis
-          - ✅ **Observability Stack** - Prometheus and Grafana for monitoring
+          - ✅ **Observability Stack** - VictoriaMetrics and Grafana for monitoring
           - ✅ **Health checks** - All services passed liveness and readiness probes
           - ✅ **Self-healing** - ArgoCD automatic drift detection and correction
 
@@ -1045,7 +1045,7 @@ jobs:
           1. **Parallelized Workflow**: Build, test, and demo jobs run efficiently
           2. **GitOps in Action**: All deployments managed through Git with ArgoCD
           3. **Production Patterns**: Health checks, resource limits, auto-scaling ready
-          4. **Observable**: Prometheus metrics, application logs, K8s events
+          4. **Observable**: VictoriaMetrics metrics, application logs, K8s events
           5. **Self-healing**: Demonstrated automatic drift correction
           6. **Zero Cost**: Entire demo runs in GitHub Actions (no cloud account needed)
 
@@ -1078,7 +1078,7 @@ jobs:
           - **Kubernetes**: Container orchestration
           - **CI/CD**: GitHub Actions with job parallelization
           - **ML Ops**: FastAPI model serving
-          - **Observability**: Prometheus + Grafana
+          - **Observability**: VictoriaMetrics + Grafana
           - **Python**: FastAPI application
           - **Docker**: Container packaging & GHCR
 
