@@ -214,9 +214,31 @@ jobs:
       - name: ⏳ Wait for applications to sync
         run: |
           echo "Waiting for applications to sync..."
-          argocd app wait ml-inference --timeout 300 --health || true
-          argocd app wait observability --timeout 300 --health || true
-          echo "✅ Applications synced"
+
+          # Give ArgoCD a moment to detect the apps
+          sleep 5
+
+          # Manually trigger sync to ensure it starts
+          echo "Triggering manual sync for ml-inference..."
+          argocd app sync ml-inference --prune || true
+
+          echo "Triggering manual sync for observability..."
+          argocd app sync observability --prune || true
+
+          # Wait for health with timeout
+          echo "Waiting for ml-inference to be healthy..."
+          argocd app wait ml-inference --timeout 180 --health || {
+            echo "⚠️ ml-inference did not become healthy in time"
+            argocd app get ml-inference
+          }
+
+          echo "Waiting for observability to be healthy..."
+          argocd app wait observability --timeout 180 --health || {
+            echo "⚠️ observability did not become healthy in time"
+            argocd app get observability
+          }
+
+          echo "✅ Applications sync attempted"
 
       - name: 🔍 Verify ArgoCD applications
         run: |
