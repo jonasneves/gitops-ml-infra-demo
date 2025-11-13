@@ -214,9 +214,31 @@ jobs:
       - name: ⏳ Wait for applications to sync
         run: |
           echo "Waiting for applications to sync..."
-          argocd app wait ml-inference --timeout 300 --health || true
-          argocd app wait observability --timeout 300 --health || true
-          echo "✅ Applications synced"
+
+          # Give ArgoCD a moment to detect the apps
+          sleep 5
+
+          # Manually trigger sync to ensure it starts
+          echo "Triggering manual sync for ml-inference..."
+          argocd app sync ml-inference --prune || true
+
+          echo "Triggering manual sync for observability..."
+          argocd app sync observability --prune || true
+
+          # Wait for health with timeout
+          echo "Waiting for ml-inference to be healthy..."
+          argocd app wait ml-inference --timeout 180 --health || {
+            echo "⚠️ ml-inference did not become healthy in time"
+            argocd app get ml-inference
+          }
+
+          echo "Waiting for observability to be healthy..."
+          argocd app wait observability --timeout 180 --health || {
+            echo "⚠️ observability did not become healthy in time"
+            argocd app get observability
+          }
+
+          echo "✅ Applications sync attempted"
 
       - name: 🔍 Verify ArgoCD applications
         run: |
@@ -332,6 +354,18 @@ jobs:
           sleep 5
           argocd login localhost:8080 --username admin --password $ARGOCD_PASSWORD --insecure
 
+      - name: 📦 Register Git repository with ArgoCD
+        run: |
+          echo "Registering repository with ArgoCD..."
+
+          argocd repo add https://github.com/${{ github.repository }}.git \
+            --username ${{ github.actor }} \
+            --password ${{ secrets.GITHUB_TOKEN }} \
+            --insecure-skip-server-verification \
+            --upsert
+
+          echo "✅ Repository registered with ArgoCD"
+
       - name: 🚀 Deploy applications
         run: |
           kubectl create namespace ml-inference || true
@@ -433,11 +467,9 @@ jobs:
       - name: ☸️ Start Minikube cluster
         uses: medyagh/setup-minikube@latest
         with:
-          minikube-version: ${{ env.MINIKUBE_VERSION }}
-          kubernetes-version: ${{ env.KUBERNETES_VERSION }}
+          driver: docker
           cpus: 2
           memory: 4096
-          driver: docker
 
       - name: 📦 Install ArgoCD
         run: |
@@ -459,6 +491,18 @@ jobs:
           sudo mv argocd /usr/local/bin/
 
           argocd login localhost:8080 --username admin --password $ARGOCD_PASSWORD --insecure
+
+      - name: 📦 Register Git repository with ArgoCD
+        run: |
+          echo "Registering repository with ArgoCD..."
+
+          argocd repo add https://github.com/${{ github.repository }}.git \
+            --username ${{ github.actor }} \
+            --password ${{ secrets.GITHUB_TOKEN }} \
+            --insecure-skip-server-verification \
+            --upsert
+
+          echo "✅ Repository registered with ArgoCD"
 
       - name: 🚀 Deploy ML Inference
         run: |
