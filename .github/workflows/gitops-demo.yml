@@ -16,7 +16,7 @@ on:
           - quick
 
 env:
-  MINIKUBE_VERSION: v1.32.0
+  MINIKUBE_VERSION: v1.37.0
   KUBERNETES_VERSION: v1.28.0
   ARGOCD_VERSION: v2.9.3
   REGISTRY: ghcr.io
@@ -93,7 +93,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: ☸️ Start Minikube cluster
-        uses: medyagh/setup-minikube@v0.0.20
+        uses: medyagh/setup-minikube@latest
         with:
           minikube-version: ${{ env.MINIKUBE_VERSION }}
           kubernetes-version: ${{ env.KUBERNETES_VERSION }}
