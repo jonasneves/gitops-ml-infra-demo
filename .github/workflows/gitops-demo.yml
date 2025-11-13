@@ -159,6 +159,18 @@ jobs:
             --insecure
           echo "✅ Logged in to ArgoCD"
 
+      - name: 📦 Register Git repository with ArgoCD
+        run: |
+          echo "Registering repository with ArgoCD..."
+
+          argocd repo add https://github.com/${{ github.repository }}.git \
+            --username ${{ github.actor }} \
+            --password ${{ secrets.GITHUB_TOKEN }} \
+            --insecure-skip-server-verification \
+            --upsert
+
+          echo "✅ Repository registered with ArgoCD"
+
       - name: 📝 Create namespaces
         run: |
           kubectl create namespace ml-inference || true
