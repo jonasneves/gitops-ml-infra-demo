@@ -1,9 +1,9 @@
 name: GitOps Infrastructure Demo
 
 on:
-  push:
-    branches: [main, claude/gitops-*]
-  pull_request:
+  schedule:
+    # Run daily at 9:00 AM UTC (adjust timezone as needed)
+    - cron: '0 9 * * *'
   workflow_dispatch:
     inputs:
       demo_mode:
