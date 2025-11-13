@@ -90,6 +90,7 @@ jobs:
 
     permissions:
       contents: read
+      packages: read
 
     steps:
       - name: 📥 Checkout code
@@ -323,6 +324,7 @@ jobs:
 
     permissions:
       contents: read
+      packages: read
 
     steps:
       - name: 📥 Checkout code
@@ -499,6 +501,7 @@ jobs:
 
     permissions:
       contents: read
+      packages: read
 
     steps:
       - name: 📥 Checkout code
