@@ -171,6 +171,19 @@ jobs:
 
           echo "✅ Repository registered with ArgoCD"
 
+      - name: 🐳 Setup Docker image in Minikube
+        run: |
+          echo "Pulling Docker image from GHCR..."
+          docker pull ghcr.io/${{ github.repository_owner }}/ml-inference:latest
+
+          echo "Loading image into Minikube..."
+          minikube image load ghcr.io/${{ github.repository_owner }}/ml-inference:latest
+
+          echo "Verifying image in Minikube..."
+          minikube image ls | grep ml-inference
+
+          echo "✅ Docker image loaded into Minikube"
+
       - name: 📝 Create namespaces
         run: |
           kubectl create namespace ml-inference || true
@@ -366,6 +379,19 @@ jobs:
 
           echo "✅ Repository registered with ArgoCD"
 
+      - name: 🐳 Setup Docker image in Minikube
+        run: |
+          echo "Pulling Docker image from GHCR..."
+          docker pull ghcr.io/${{ github.repository_owner }}/ml-inference:latest
+
+          echo "Loading image into Minikube..."
+          minikube image load ghcr.io/${{ github.repository_owner }}/ml-inference:latest
+
+          echo "Verifying image in Minikube..."
+          minikube image ls | grep ml-inference
+
+          echo "✅ Docker image loaded into Minikube"
+
       - name: 🚀 Deploy applications
         run: |
           kubectl create namespace ml-inference || true
@@ -503,6 +529,19 @@ jobs:
             --upsert
 
           echo "✅ Repository registered with ArgoCD"
+
+      - name: 🐳 Setup Docker image in Minikube
+        run: |
+          echo "Pulling Docker image from GHCR..."
+          docker pull ghcr.io/${{ github.repository_owner }}/ml-inference:latest
+
+          echo "Loading image into Minikube..."
+          minikube image load ghcr.io/${{ github.repository_owner }}/ml-inference:latest
+
+          echo "Verifying image in Minikube..."
+          minikube image ls | grep ml-inference
+
+          echo "✅ Docker image loaded into Minikube"
 
       - name: 🚀 Deploy ML Inference
         run: |
