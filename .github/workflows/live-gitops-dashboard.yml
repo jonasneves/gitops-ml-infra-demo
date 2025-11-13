@@ -412,7 +412,7 @@ jobs:
           echo "================================================"
           echo "🎭 LIVE GITOPS DASHBOARD URL:"
           echo "================================================"
-          echo "https://gitops-demo.neevs.io"
+          echo "https://gitops-infra.neevs.io"
           echo "================================================"
           echo ""
           echo "⏰ Dashboard will remain open for ${{ inputs.duration }} minutes"
