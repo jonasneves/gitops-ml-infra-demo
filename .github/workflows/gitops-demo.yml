@@ -93,7 +93,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: ☸️ Start Minikube cluster
-        uses: medyagh/setup-minikube@latest
+        uses: medyagh/setup-minikube@v0.0.18
         with:
           minikube-version: ${{ env.MINIKUBE_VERSION }}
           kubernetes-version: ${{ env.KUBERNETES_VERSION }}
@@ -280,7 +280,7 @@ jobs:
           path: /tmp/cluster-state/
 
       - name: ☸️ Start Minikube cluster
-        uses: medyagh/setup-minikube@latest
+        uses: medyagh/setup-minikube@v0.0.18
         with:
           minikube-version: ${{ env.MINIKUBE_VERSION }}
           kubernetes-version: ${{ env.KUBERNETES_VERSION }}
