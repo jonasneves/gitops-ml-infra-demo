@@ -3,27 +3,27 @@
 [![GitOps Demo](https://github.com/jonasneves/gitops-ml-infra-demo/actions/workflows/gitops-demo.yml/badge.svg)](https://github.com/jonasneves/gitops-ml-infra-demo/actions/workflows/gitops-demo.yml)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-**A production-ready ML infrastructure demo using GitOps practices with ArgoCD, Kubernetes, and GitHub Actions.**
+**Production-grade ML infrastructure implementing GitOps practices with ArgoCD, Kubernetes, and automated CI/CD pipelines.**
 
-🎯 **Zero cost** - Runs entirely in GitHub Actions free tier
-⚡ **Fully automated** - One-click deployment demonstration
-📊 **Production patterns** - GitOps, observability, auto-scaling
-🚀 **Live demos** - [View workflow runs](../../actions/workflows/gitops-demo.yml)
+Built entirely on GitHub Actions free tier with zero cloud costs, this project demonstrates modern infrastructure patterns including declarative deployments, self-healing systems, real-time observability, and automated testing.
 
-## 🎬 Try It Now
+## Overview
 
-Click the **Actions** tab above → Select **GitOps Infrastructure Demo** → Click **Run workflow**
+This project implements a complete MLOps infrastructure stack featuring:
 
-Watch as the system:
-1. Creates a Kubernetes cluster (Minikube)
-2. Installs ArgoCD GitOps controller
-3. Deploys ML inference service automatically
-4. Sets up Prometheus + Grafana observability
-5. Demonstrates self-healing infrastructure
+- **GitOps Deployment**: ArgoCD continuously syncs Kubernetes manifests from Git
+- **Automated CI/CD**: Parallelized GitHub Actions workflows for build, deploy, test, and demo phases
+- **ML Inference Service**: FastAPI-based sentiment analysis API with Prometheus metrics
+- **Observability Stack**: Prometheus monitoring and Grafana visualization
+- **Live Dashboard**: Real-time deployment progress tracking via Server-Sent Events
+- **Public Exposure**: Cloudflare Tunnel integration for external access
+- **Self-Healing**: Automatic drift detection and correction
 
-**Results available as downloadable artifacts** after each run!
+The infrastructure runs on Minikube within GitHub Actions runners, demonstrating that complex cloud-native patterns can be implemented without cloud provider costs.
 
-## 🏗️ Architecture
+## Architecture
+
+### Infrastructure Stack
 
 ```
 ┌─────────────────────────────────────────┐
@@ -58,49 +58,78 @@ Watch as the system:
      Changes → ArgoCD Auto-Syncs
 ```
 
-## ✨ What This Demonstrates
+### CI/CD Pipeline
+
+The workflow implements a parallelized job structure for optimal performance:
+
+```
+Build Job (8 min)
+    │
+    ├─ Build Docker image
+    ├─ Push to GHCR
+    └─ Store artifacts
+         │
+         ├──────────────┬──────────────┐
+         │              │              │
+    Deploy Job     Test Job      Demo Job
+    (5 min)        (3 min)       (2 min)
+         │              │              │
+    ├─ Minikube    ├─ Health     ├─ Self-healing
+    ├─ ArgoCD      ├─ API tests  └─ Drift detection
+    └─ Sync apps   └─ Metrics
+         │              │              │
+         └──────────────┴──────────────┘
+                      │
+                 Report Job
+                 (1 min)
+```
+
+Jobs are parallelized where possible, with deploy/test/demo running concurrently after the build completes.
+
+## Technical Implementation
 
 ### GitOps Practices
-- ✅ **Declarative Infrastructure** - Everything defined in Git
-- ✅ **ArgoCD** - Automated deployment and drift detection
-- ✅ **Self-Healing** - Automatic correction of manual changes
-- ✅ **Git as Source of Truth** - All changes auditable
-- ✅ **Continuous Deployment** - Automatic sync on git push
+- **Declarative Infrastructure**: All resources defined in version-controlled YAML manifests
+- **ArgoCD Integration**: Automated deployment with continuous synchronization from Git
+- **Self-Healing**: Automatic drift detection and correction when cluster state diverges from Git
+- **Audit Trail**: Complete history of infrastructure changes via Git commits
+- **Continuous Deployment**: Automatic sync on repository changes
 
-### Production ML Operations
-- ✅ **Container Orchestration** - Kubernetes deployment patterns
-- ✅ **ML Model Serving** - FastAPI inference API
-- ✅ **Auto-Scaling** - HPA based on CPU/memory
-- ✅ **Health Checks** - Liveness, readiness, startup probes
-- ✅ **Resource Management** - Requests and limits
+### ML Operations
+- **Container Orchestration**: Kubernetes deployment with replica management
+- **Inference Service**: FastAPI-based REST API for sentiment analysis
+- **Auto-Scaling**: Horizontal Pod Autoscaler (HPA) based on CPU/memory utilization
+- **Health Probes**: Liveness, readiness, and startup probes for reliability
+- **Resource Management**: CPU and memory requests/limits for optimal scheduling
 
 ### Observability
-- ✅ **Prometheus** - Metrics collection and alerting
-- ✅ **Grafana** - Dashboard visualization
-- ✅ **Custom Metrics** - Application-specific monitoring
-- ✅ **Service Discovery** - Automatic endpoint detection
+- **Prometheus**: Metrics collection from application and infrastructure
+- **Grafana**: Visualization dashboards for monitoring
+- **Custom Metrics**: Application-specific instrumentation
+- **Service Discovery**: Automatic endpoint detection via pod annotations
 
-### CI/CD Automation
-- ✅ **GitHub Actions** - Fully automated workflows
-- ✅ **Container Building** - Docker image creation
-- ✅ **GHCR Integration** - GitHub Container Registry
-- ✅ **Automated Testing** - Health check validation
-- ✅ **Artifact Generation** - Downloadable results
+### CI/CD Pipeline
+- **Parallelized Workflows**: Independent jobs run concurrently for faster feedback
+- **Container Registry**: GitHub Container Registry (GHCR) integration
+- **Automated Testing**: Health checks and API validation
+- **Artifact Generation**: Deployment reports and logs
+- **Fail-Fast**: Concurrency control cancels outdated runs
 
-## 🚀 Quick Start
+## Getting Started
 
-### Option 1: GitHub Actions (Recommended)
+### GitHub Actions Workflow
 
-**For Recruiters/Interviewers:**
-1. Visit the [Actions tab](../../actions/workflows/gitops-demo.yml)
-2. Click "Run workflow"
-3. Watch the live demonstration
-4. Download artifacts to see full results
+The primary workflow runs the complete infrastructure stack:
 
-**Duration:** ~8-10 minutes
-**Cost:** $0 (GitHub Actions free tier)
+1. Navigate to the [Actions tab](../../actions/workflows/gitops-demo.yml)
+2. Select "GitOps Infrastructure Demo"
+3. Click "Run workflow"
+4. Monitor the parallelized build, deploy, test, and demo jobs
+5. Download artifacts containing deployment reports and logs
 
-### Option 2: Local Deployment
+**Duration:** ~10 minutes | **Cost:** $0 (GitHub Actions free tier)
+
+### Local Deployment
 
 ```bash
 # Prerequisites: Docker, kubectl, minikube
@@ -133,91 +162,95 @@ argocd app create ml-inference \
   --sync-policy automated
 ```
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 .
 ├── .github/workflows/
-│   └── gitops-demo.yml          # Automated GitOps demonstration
+│   ├── gitops-demo.yml                # Main parallelized GitOps workflow
+│   ├── live-gitops-dashboard.yml      # Real-time deployment dashboard
+│   ├── cloudflare-tunnel-demo.yml     # Public service exposure
+│   └── debug-ssh-access.yml           # Interactive debugging via SSH
 │
 ├── app/ml-inference/
-│   ├── app.py                   # FastAPI ML inference service
+│   ├── app.py                         # FastAPI sentiment analysis service
 │   ├── requirements.txt
 │   └── Dockerfile
 │
 ├── k8s/
-│   ├── inference-service/       # ML service manifests
-│   │   ├── deployment.yaml      # Pod specification
-│   │   ├── service.yaml         # ClusterIP service
-│   │   ├── hpa.yaml             # Auto-scaling config
-│   │   └── servicemonitor.yaml  # Prometheus scraping
+│   ├── inference-service/             # ML service manifests
+│   │   ├── deployment.yaml            # Pod specification with HPA
+│   │   ├── service.yaml               # ClusterIP service
+│   │   └── hpa.yaml                   # Horizontal Pod Autoscaler
 │   │
-│   └── observability/           # Monitoring stack
+│   └── observability/                 # Monitoring stack
 │       ├── prometheus-deployment.yaml
 │       └── grafana-deployment.yaml
 │
 ├── docs/
-│   ├── GITOPS.md               # GitOps concepts explained
-│   └── DEMO-GUIDE.md           # How to present this
+│   ├── WORKFLOW-ARCHITECTURE.md       # CI/CD pipeline design
+│   ├── LIVE-DASHBOARD.md              # Real-time monitoring setup
+│   ├── CLOUDFLARE-TUNNEL.md           # Public exposure guide
+│   └── DEBUG-WORKFLOW.md              # SSH debugging documentation
 │
 └── README.md
 ```
 
-## 🎓 Key Concepts Demonstrated
+## Key Features
 
-### 1. GitOps Workflow
+### GitOps Workflow
 
-**Traditional Deployment:**
+The infrastructure implements a pull-based deployment model where ArgoCD continuously monitors Git and automatically syncs changes to the cluster:
+
 ```
-Developer → kubectl apply → Cluster
+Git Repository (Source of Truth)
+      ↓
+ArgoCD Watches for Changes
+      ↓
+Automatic Sync to Kubernetes
+      ↓
+Drift Detection & Self-Healing
 ```
 
-**GitOps Approach:**
-```
-Developer → Git Push → ArgoCD watches Git → Syncs to Cluster
-```
+This approach provides complete audit trails through Git history, easy rollbacks via Git reverts, and automatic drift correction when cluster state diverges from the declared manifests.
 
-**Benefits:**
-- Audit trail (Git history)
-- Easy rollback (Git revert)
-- Drift detection
-- Declarative infrastructure
+### Self-Healing Demonstration
 
-### 2. Self-Healing
+The workflow includes an automated self-healing test:
+1. Deploy application with 2 replicas (declared in Git)
+2. Manually scale to 5 replicas (simulate configuration drift)
+3. ArgoCD detects the divergence from Git
+4. System automatically reverts to the declared state (2 replicas)
 
-The demo includes a self-healing demonstration:
-1. Application deployed with 2 replicas (defined in Git)
-2. Manual scale to 5 replicas (simulating drift)
-3. ArgoCD detects difference from Git
-4. ArgoCD automatically reverts to 2 replicas
+### Production Patterns
 
-### 3. Production Patterns
+- **Health Probes**: Liveness, readiness, and startup probes ensure reliability
+- **Resource Constraints**: CPU and memory requests/limits for proper scheduling
+- **Horizontal Scaling**: HPA automatically adjusts replicas based on utilization
+- **Pod Anti-Affinity**: Distribute pods across nodes for high availability
+- **Custom Metrics**: Prometheus instrumentation for monitoring
 
-- **Health Checks**: Liveness, readiness, and startup probes
-- **Resource Limits**: CPU and memory constraints
-- **Auto-scaling**: HPA based on resource utilization
-- **Pod Anti-Affinity**: Distribute pods across nodes
-- **Prometheus Metrics**: Custom application metrics
+## Deployed Services
 
-## 📊 What Gets Deployed
+### ML Inference API
 
-### ML Inference Service
+FastAPI-based sentiment analysis service with the following endpoints:
 
-- **FastAPI** application with sentiment analysis
-- **Endpoints**:
-  - `GET /health` - Health check
-  - `GET /ready` - Readiness check
-  - `POST /predict` - Single text inference
-  - `POST /predict/batch` - Batch inference
-  - `GET /metrics` - Prometheus metrics
+- `GET /health` - Health check for liveness probes
+- `GET /ready` - Readiness check for traffic routing
+- `POST /predict` - Single text sentiment analysis
+- `POST /predict/batch` - Batch processing for multiple texts
+- `GET /metrics` - Prometheus metrics exposition
 
-- **Example Usage**:
+**Example request:**
 ```bash
 curl -X POST http://localhost:8000/predict \
   -H "Content-Type: application/json" \
   -d '{"text": "This GitOps demo is amazing!"}'
+```
 
-# Response:
+**Response:**
+```json
 {
   "text": "This GitOps demo is amazing!",
   "sentiment": "positive",
@@ -229,39 +262,55 @@ curl -X POST http://localhost:8000/predict \
 
 ### Observability Stack
 
-- **Prometheus**: Scrapes metrics from ML service every 15s
-- **Grafana**: Visualizes metrics with pre-configured dashboards
-- **Dashboards**:
-  - Request rate
-  - Latency (p95, p99)
-  - Active requests
-  - Error rates
+- **Prometheus**: Metrics collection with 15-second scrape interval
+- **Grafana**: Visualization dashboards
+- **Metrics tracked**:
+  - Request rate and throughput
+  - Latency percentiles (p95, p99)
+  - Active concurrent requests
+  - Error rates and HTTP status codes
 
-## 🎯 Use Cases
+## Additional Workflows
 
-### For Students
-- Learn GitOps practices
-- Understand Kubernetes patterns
-- Build portfolio project
-- **Cost**: $0
+### Live GitOps Dashboard
 
-### For Job Seekers
-- Demonstrate infrastructure skills
-- Show in interviews
-- Prove automation expertise
-- Link in resume/LinkedIn
+Real-time monitoring dashboard that streams deployment progress via Server-Sent Events (SSE):
 
-### For Interviews
-1. Show the GitHub Actions workflow running
-2. Explain GitOps principles
-3. Walk through Kubernetes manifests
-4. Discuss production considerations
-5. Download and show artifacts
+- Progress tracking (0-100%) with phase detection
+- ArgoCD application sync status
+- Kubernetes pod lifecycle monitoring
+- Live event stream
+- Interactive API testing buttons
+- Public URL via Cloudflare Tunnel
 
-**Demo Duration**: 5-10 minutes
-**Talking Points**: See [docs/DEMO-GUIDE.md](docs/DEMO-GUIDE.md)
+**Workflow:** `.github/workflows/live-gitops-dashboard.yml`
+**Documentation:** [docs/LIVE-DASHBOARD.md](docs/LIVE-DASHBOARD.md)
 
-## 🛠️ Technologies
+### Cloudflare Tunnel Demo
+
+Exposes services to the public internet without infrastructure setup:
+
+- Zero-configuration public URLs
+- ML inference API exposure
+- Static demo website hosting
+- No Cloudflare account required
+
+**Workflow:** `.github/workflows/cloudflare-tunnel-demo.yml`
+**Documentation:** [docs/CLOUDFLARE-TUNNEL.md](docs/CLOUDFLARE-TUNNEL.md)
+
+### Debug SSH Access
+
+Interactive debugging via tmate for troubleshooting:
+
+- Direct SSH access to GitHub Actions runner
+- Optional Minikube cluster setup
+- Limited to workflow initiator
+- 20-minute session timeout
+
+**Workflow:** `.github/workflows/debug-ssh-access.yml`
+**Documentation:** [docs/DEBUG-WORKFLOW.md](docs/DEBUG-WORKFLOW.md)
+
+## Technologies
 
 | Category | Technology |
 |----------|------------|
@@ -273,61 +322,13 @@ curl -X POST http://localhost:8000/predict \
 | **Container Registry** | GitHub Container Registry (GHCR) |
 | **Languages** | Python, YAML, Bash |
 
-## 📚 Documentation
+## Documentation
 
-- **[GitOps Explained](docs/GITOPS.md)** - Understand GitOps principles
-- **[Demo Guide](docs/DEMO-GUIDE.md)** - How to present this in interviews
-- **[Local Setup](docs/LOCAL-SETUP.md)** - Run on your machine
+- **[Workflow Architecture](docs/WORKFLOW-ARCHITECTURE.md)** - CI/CD pipeline design and parallelization
+- **[Live Dashboard](docs/LIVE-DASHBOARD.md)** - Real-time deployment monitoring
+- **[Cloudflare Tunnel](docs/CLOUDFLARE-TUNNEL.md)** - Public service exposure
+- **[Debug Workflow](docs/DEBUG-WORKFLOW.md)** - SSH-based debugging
 
-## 🌟 Why This Approach?
-
-### Advantages over Traditional Demos
-
-| Traditional | GitOps Demo |
-|-------------|-------------|
-| Requires AWS account | GitHub Actions only |
-| Costs $50-200/month | Completely free |
-| Manual deployment | Automated workflow |
-| Static screenshots | Live demonstrations |
-| Hard to reproduce | One-click repeatable |
-| No audit trail | Full Git history |
-
-### What Recruiters See
-
-✅ **GitOps expertise** - Modern deployment practice
-✅ **Kubernetes mastery** - Production patterns
-✅ **CI/CD automation** - Full pipeline
-✅ **ML operations** - Model serving infrastructure
-✅ **Observability** - Monitoring and metrics
-✅ **Documentation** - Clear communication
-
-## 🎤 Interview Talking Points
-
-**"Tell me about this project":**
-
-> "This demonstrates production ML infrastructure using GitOps practices. Instead of manually deploying with kubectl, everything is defined in Git and automatically synced by ArgoCD. The workflow runs in GitHub Actions, creating a Kubernetes cluster, deploying a sentiment analysis API, and setting up full observability. It shows I understand not just ML, but the infrastructure needed to run it reliably in production."
-
-**"Why GitOps?":**
-
-> "GitOps provides several benefits: Git becomes the single source of truth with full audit trails, rollbacks are just a git revert, and drift detection ensures the cluster matches what's in Git. It's how modern companies like Anthropic and OpenAI manage their infrastructure at scale."
-
-**"What would you add for production?":**
-
-> "For production, I'd add: secrets management with Sealed Secrets or AWS Secrets Manager, multi-environment support (dev/staging/prod), integration testing in CI, automated rollback on health check failures, and monitoring with actual alerting to PagerDuty/Slack."
-
-## 📈 Project Metrics
-
-- **Files**: ~15 (concise, focused)
-- **Lines of Code**: ~1,000
-- **Deployment Time**: 8-10 minutes
-- **Technologies**: 7+
-- **Cost**: $0
-- **Runs**: Unlimited (GitHub Actions free tier)
-
-## 🤝 Contributing
-
-This is a portfolio/demo project. Feel free to fork and customize for your own use!
-
-## 📄 License
+## License
 
 MIT License - see [LICENSE](LICENSE) file
