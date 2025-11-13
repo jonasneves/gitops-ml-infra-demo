@@ -393,21 +393,26 @@ jobs:
           cloudflared version
 
       - name: 🌍 Start Cloudflare Tunnel
+        env:
+          TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
         run: |
           echo "================================================"
           echo "🌐 Starting Cloudflare Tunnel..."
           echo "================================================"
 
-          cloudflared tunnel --url http://localhost:8080 > /tmp/cf-dashboard.log 2>&1 &
-          CF_PID=$!
+          # Create tunnel credentials file
+          mkdir -p ~/.cloudflared
+          echo "$TUNNEL_TOKEN" > ~/.cloudflared/tunnel-token.json
 
+          # Start named tunnel
+          cloudflared tunnel --credentials-file ~/.cloudflared/tunnel-token.json run gitops-demo > /tmp/cf-dashboard.log 2>&1 &
           sleep 10
 
           echo ""
           echo "================================================"
           echo "🎭 LIVE GITOPS DASHBOARD URL:"
           echo "================================================"
-          grep -o 'https://[^ ]*\.trycloudflare.com' /tmp/cf-dashboard.log | head -1
+          echo "https://gitops-infra.neevs.io"
           echo "================================================"
           echo ""
           echo "⏰ Dashboard will remain open for ${{ inputs.duration }} minutes"
