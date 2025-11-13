@@ -1,0 +1,857 @@
+name: 🎭 Live GitOps Dashboard
+
+on:
+  workflow_dispatch:
+    inputs:
+      duration:
+        description: 'Keep dashboard open (minutes)'
+        required: false
+        default: '20'
+        type: string
+
+jobs:
+  live-dashboard:
+    name: 🎬 GitOps Theater Mode
+    runs-on: ubuntu-22.04
+    timeout-minutes: 35
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 📦 Install Python dependencies
+        run: |
+          pip install flask flask-cors
+          echo "✅ Python dependencies installed"
+
+      - name: 🐳 Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 🔐 Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 🏗️ Build ML inference image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./app/ml-inference
+          load: true
+          tags: ml-inference:live-demo
+          cache-from: type=gha
+          push: false
+
+      - name: ☸️ Start Minikube cluster
+        uses: medyagh/setup-minikube@latest
+        with:
+          driver: docker
+          cpus: 2
+          memory: 4096
+          addons: metrics-server,ingress
+
+      - name: 🔍 Verify cluster
+        run: |
+          echo "=== Cluster Ready ==="
+          kubectl cluster-info
+          kubectl get nodes
+          echo "✅ Cluster is ready"
+
+      - name: 🐳 Load Docker image into Minikube
+        run: |
+          echo "Loading ML inference image into Minikube..."
+          minikube image load ml-inference:live-demo
+
+          # Tag it as the GHCR image name for deployment
+          docker tag ml-inference:live-demo ghcr.io/${{ github.repository_owner }}/ml-inference:latest
+          minikube image load ghcr.io/${{ github.repository_owner }}/ml-inference:latest
+
+          echo "✅ Image loaded into Minikube"
+          minikube image ls | grep ml-inference
+
+      - name: 📦 Install ArgoCD
+        run: |
+          echo "Installing ArgoCD..."
+          kubectl create namespace argocd
+          kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/v2.9.3/manifests/install.yaml
+
+          echo "Waiting for ArgoCD to be ready..."
+          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=argocd-server -n argocd --timeout=300s
+
+          echo "✅ ArgoCD installed"
+
+      - name: 🔑 Setup ArgoCD
+        run: |
+          sleep 10
+          ARGOCD_PASSWORD=$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d)
+          echo "::add-mask::$ARGOCD_PASSWORD"
+          echo "ARGOCD_PASSWORD=$ARGOCD_PASSWORD" >> $GITHUB_ENV
+
+          # Install ArgoCD CLI
+          curl -sSL -o argocd https://github.com/argoproj/argo-cd/releases/download/v2.9.3/argocd-linux-amd64
+          chmod +x argocd
+          sudo mv argocd /usr/local/bin/
+
+          # Port forward ArgoCD
+          kubectl port-forward svc/argocd-server -n argocd 8081:443 > /dev/null 2>&1 &
+          sleep 5
+
+          # Login to ArgoCD
+          argocd login localhost:8081 --username admin --password $ARGOCD_PASSWORD --insecure
+
+          # Register repository
+          argocd repo add https://github.com/${{ github.repository }}.git \
+            --username ${{ github.actor }} \
+            --password ${{ secrets.GITHUB_TOKEN }} \
+            --insecure-skip-server-verification \
+            --upsert
+
+          echo "✅ ArgoCD configured"
+
+      - name: 🎨 Create dashboard server
+        run: |
+          cat > /tmp/dashboard_server.py << 'DASHBOARD_EOF'
+          from flask import Flask, Response, jsonify, render_template_string
+          from flask_cors import CORS
+          import subprocess
+          import json
+          import time
+          from datetime import datetime
+          import threading
+          import re
+
+          app = Flask(__name__)
+          CORS(app)
+
+          # Global state
+          deployment_state = {
+              "start_time": time.time(),
+              "argocd_apps": [],
+              "pods": [],
+              "events": [],
+              "progress": 0,
+              "phase": "Initializing"
+          }
+
+          def run_command(cmd):
+              """Run shell command and return output"""
+              try:
+                  result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=5)
+                  return result.stdout.strip()
+              except Exception as e:
+                  return f"Error: {str(e)}"
+
+          def get_argocd_status():
+              """Get ArgoCD application status"""
+              try:
+                  output = run_command("argocd app list -o json 2>/dev/null || echo '[]'")
+                  if output and output != '[]':
+                      apps = json.loads(output)
+                      return [{
+                          "name": app.get("metadata", {}).get("name", "unknown"),
+                          "sync": app.get("status", {}).get("sync", {}).get("status", "Unknown"),
+                          "health": app.get("status", {}).get("health", {}).get("status", "Unknown"),
+                          "revision": app.get("status", {}).get("sync", {}).get("revision", "")[:7]
+                      } for app in apps]
+              except:
+                  pass
+              return []
+
+          def get_pods_status():
+              """Get Kubernetes pods status"""
+              try:
+                  output = run_command("kubectl get pods -A -o json 2>/dev/null")
+                  if output:
+                      data = json.loads(output)
+                      pods = []
+                      for item in data.get("items", []):
+                          namespace = item["metadata"]["namespace"]
+                          if namespace in ["ml-inference", "monitoring", "argocd"]:
+                              name = item["metadata"]["name"]
+                              status = item["status"]["phase"]
+
+                              # Get container ready status
+                              ready = "0/0"
+                              if "containerStatuses" in item["status"]:
+                                  total = len(item["status"]["containerStatuses"])
+                                  ready_count = sum(1 for c in item["status"]["containerStatuses"] if c.get("ready", False))
+                                  ready = f"{ready_count}/{total}"
+
+                              age = item["metadata"].get("creationTimestamp", "")
+
+                              pods.append({
+                                  "namespace": namespace,
+                                  "name": name,
+                                  "status": status,
+                                  "ready": ready,
+                                  "age": age
+                              })
+                      return pods
+              except:
+                  pass
+              return []
+
+          def get_recent_events():
+              """Get recent Kubernetes events"""
+              try:
+                  output = run_command(
+                      "kubectl get events -A --sort-by='.lastTimestamp' -o json 2>/dev/null"
+                  )
+                  if output:
+                      data = json.loads(output)
+                      events = []
+                      for item in data.get("items", [])[-20:]:  # Last 20 events
+                          namespace = item["metadata"]["namespace"]
+                          if namespace in ["ml-inference", "monitoring", "argocd"]:
+                              events.append({
+                                  "time": item.get("lastTimestamp", item.get("eventTime", "")),
+                                  "namespace": namespace,
+                                  "reason": item.get("reason", ""),
+                                  "message": item.get("message", "")[:100]
+                              })
+                      return events[-10:]  # Return last 10
+              except:
+                  pass
+              return []
+
+          def calculate_progress():
+              """Calculate deployment progress"""
+              apps = deployment_state["argocd_apps"]
+              pods = deployment_state["pods"]
+
+              if not apps:
+                  return 10  # Initial setup
+
+              # Check ArgoCD apps
+              synced_apps = sum(1 for app in apps if app["sync"] == "Synced")
+              healthy_apps = sum(1 for app in apps if app["health"] == "Healthy")
+
+              # Check pods
+              running_pods = sum(1 for pod in pods if pod["status"] == "Running")
+              ready_pods = sum(1 for pod in pods if pod["ready"].split("/")[0] == pod["ready"].split("/")[1])
+
+              total_score = 0
+              total_score += (synced_apps / max(len(apps), 1)) * 40  # 40% for sync
+              total_score += (healthy_apps / max(len(apps), 1)) * 30  # 30% for health
+              total_score += (running_pods / max(len(pods), 1)) * 20 if pods else 0  # 20% for running
+              total_score += (ready_pods / max(len(pods), 1)) * 10 if pods else 0  # 10% for ready
+
+              return min(int(total_score), 100)
+
+          def determine_phase():
+              """Determine current deployment phase"""
+              apps = deployment_state["argocd_apps"]
+              pods = deployment_state["pods"]
+              progress = deployment_state["progress"]
+
+              if progress < 20:
+                  return "Initializing ArgoCD"
+              elif progress < 50:
+                  return "Syncing Applications"
+              elif progress < 80:
+                  return "Starting Pods"
+              elif progress < 100:
+                  return "Finalizing Deployment"
+              else:
+                  return "Deployment Complete"
+
+          def update_state():
+              """Background thread to update deployment state"""
+              while True:
+                  try:
+                      deployment_state["argocd_apps"] = get_argocd_status()
+                      deployment_state["pods"] = get_pods_status()
+                      deployment_state["events"] = get_recent_events()
+                      deployment_state["progress"] = calculate_progress()
+                      deployment_state["phase"] = determine_phase()
+                  except Exception as e:
+                      print(f"Error updating state: {e}")
+                  time.sleep(2)  # Update every 2 seconds
+
+          # Start background updater
+          threading.Thread(target=update_state, daemon=True).start()
+
+          @app.route('/')
+          def index():
+              """Serve the dashboard HTML"""
+              return render_template_string(DASHBOARD_HTML)
+
+          @app.route('/api/status')
+          def status():
+              """Get current status as JSON"""
+              elapsed = int(time.time() - deployment_state["start_time"])
+              return jsonify({
+                  **deployment_state,
+                  "elapsed": elapsed
+              })
+
+          @app.route('/api/stream')
+          def stream():
+              """Server-Sent Events stream for real-time updates"""
+              def generate():
+                  while True:
+                      elapsed = int(time.time() - deployment_state["start_time"])
+                      data = {
+                          **deployment_state,
+                          "elapsed": elapsed
+                      }
+                      yield f"data: {json.dumps(data)}\n\n"
+                      time.sleep(2)
+
+              return Response(generate(), mimetype='text/event-stream')
+
+          @app.route('/api/test/<endpoint>')
+          def test_endpoint(endpoint):
+              """Test ML inference endpoints"""
+              try:
+                  if endpoint == 'health':
+                      output = run_command("kubectl exec -n ml-inference deploy/ml-inference -- curl -s http://localhost:8000/health")
+                  elif endpoint == 'predict':
+                      output = run_command('kubectl exec -n ml-inference deploy/ml-inference -- curl -s -X POST http://localhost:8000/predict -H "Content-Type: application/json" -d \'{"text":"This is amazing!"}\'')
+                  elif endpoint == 'metrics':
+                      output = run_command("kubectl exec -n ml-inference deploy/ml-inference -- curl -s http://localhost:8000/metrics | grep inference_ | head -10")
+                  else:
+                      return jsonify({"error": "Unknown endpoint"}), 400
+
+                  return jsonify({"output": output})
+              except Exception as e:
+                  return jsonify({"error": str(e)}), 500
+
+          if __name__ == '__main__':
+              app.run(host='0.0.0.0', port=8080, debug=False)
+          DASHBOARD_EOF
+
+          echo "✅ Dashboard server created"
+
+      - name: 🎨 Create dashboard HTML
+        run: |
+          cat > /tmp/dashboard.html << 'HTML_EOF'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>Live GitOps Dashboard</title>
+              <style>
+                  * {
+                      margin: 0;
+                      padding: 0;
+                      box-sizing: border-box;
+                  }
+
+                  body {
+                      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                      background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+                      color: white;
+                      padding: 20px;
+                      min-height: 100vh;
+                  }
+
+                  .container {
+                      max-width: 1400px;
+                      margin: 0 auto;
+                  }
+
+                  .header {
+                      text-align: center;
+                      margin-bottom: 30px;
+                      padding: 20px;
+                      background: rgba(255, 255, 255, 0.1);
+                      border-radius: 15px;
+                      backdrop-filter: blur(10px);
+                  }
+
+                  .header h1 {
+                      font-size: 2.5em;
+                      margin-bottom: 10px;
+                  }
+
+                  .header .subtitle {
+                      font-size: 1.2em;
+                      opacity: 0.9;
+                  }
+
+                  .progress-section {
+                      background: rgba(255, 255, 255, 0.1);
+                      border-radius: 15px;
+                      padding: 25px;
+                      margin-bottom: 20px;
+                      backdrop-filter: blur(10px);
+                  }
+
+                  .progress-bar {
+                      background: rgba(0, 0, 0, 0.3);
+                      border-radius: 10px;
+                      height: 30px;
+                      overflow: hidden;
+                      margin: 15px 0;
+                  }
+
+                  .progress-fill {
+                      height: 100%;
+                      background: linear-gradient(90deg, #4CAF50, #8BC34A);
+                      transition: width 0.5s ease;
+                      display: flex;
+                      align-items: center;
+                      justify-content: center;
+                      font-weight: bold;
+                  }
+
+                  .stats-grid {
+                      display: grid;
+                      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+                      gap: 20px;
+                      margin-bottom: 20px;
+                  }
+
+                  .stat-card {
+                      background: rgba(255, 255, 255, 0.1);
+                      border-radius: 15px;
+                      padding: 20px;
+                      backdrop-filter: blur(10px);
+                  }
+
+                  .stat-card h3 {
+                      font-size: 1em;
+                      opacity: 0.9;
+                      margin-bottom: 10px;
+                  }
+
+                  .stat-card .value {
+                      font-size: 2em;
+                      font-weight: bold;
+                      margin-bottom: 5px;
+                  }
+
+                  .pods-section, .events-section, .apps-section {
+                      background: rgba(255, 255, 255, 0.1);
+                      border-radius: 15px;
+                      padding: 25px;
+                      margin-bottom: 20px;
+                      backdrop-filter: blur(10px);
+                  }
+
+                  .pods-section h2, .events-section h2, .apps-section h2 {
+                      margin-bottom: 15px;
+                      font-size: 1.5em;
+                  }
+
+                  .pod-item, .event-item, .app-item {
+                      background: rgba(0, 0, 0, 0.2);
+                      border-radius: 8px;
+                      padding: 12px;
+                      margin-bottom: 10px;
+                      display: flex;
+                      justify-content: space-between;
+                      align-items: center;
+                  }
+
+                  .status-badge {
+                      padding: 4px 12px;
+                      border-radius: 12px;
+                      font-size: 0.85em;
+                      font-weight: bold;
+                  }
+
+                  .status-running { background: #4CAF50; }
+                  .status-pending { background: #FF9800; }
+                  .status-failed { background: #f44336; }
+                  .status-synced { background: #4CAF50; }
+                  .status-outofsync { background: #FF9800; }
+                  .status-healthy { background: #4CAF50; }
+                  .status-progressing { background: #2196F3; }
+                  .status-degraded { background: #f44336; }
+
+                  .test-buttons {
+                      display: flex;
+                      gap: 10px;
+                      flex-wrap: wrap;
+                      margin-top: 20px;
+                  }
+
+                  button {
+                      background: #4CAF50;
+                      color: white;
+                      border: none;
+                      padding: 12px 24px;
+                      border-radius: 8px;
+                      cursor: pointer;
+                      font-size: 1em;
+                      transition: background 0.3s;
+                  }
+
+                  button:hover {
+                      background: #45a049;
+                  }
+
+                  button:disabled {
+                      background: #666;
+                      cursor: not-allowed;
+                  }
+
+                  #testResult {
+                      background: rgba(0, 0, 0, 0.4);
+                      border-radius: 8px;
+                      padding: 15px;
+                      margin-top: 15px;
+                      font-family: monospace;
+                      white-space: pre-wrap;
+                      word-wrap: break-word;
+                      max-height: 300px;
+                      overflow-y: auto;
+                  }
+
+                  .live-indicator {
+                      display: inline-block;
+                      width: 10px;
+                      height: 10px;
+                      background: #f44336;
+                      border-radius: 50%;
+                      animation: pulse 2s infinite;
+                      margin-right: 8px;
+                  }
+
+                  @keyframes pulse {
+                      0%, 100% { opacity: 1; }
+                      50% { opacity: 0.5; }
+                  }
+
+                  .timestamp {
+                      font-size: 0.85em;
+                      opacity: 0.7;
+                  }
+              </style>
+          </head>
+          <body>
+              <div class="container">
+                  <div class="header">
+                      <h1>🎭 Live GitOps Dashboard</h1>
+                      <p class="subtitle">
+                          <span class="live-indicator"></span>
+                          Real-time deployment monitoring
+                      </p>
+                  </div>
+
+                  <div class="progress-section">
+                      <h2 id="phaseText">Initializing...</h2>
+                      <div class="progress-bar">
+                          <div class="progress-fill" id="progressBar" style="width: 0%">0%</div>
+                      </div>
+                      <p class="timestamp" id="elapsed">Elapsed: 0s</p>
+                  </div>
+
+                  <div class="stats-grid">
+                      <div class="stat-card">
+                          <h3>📦 ArgoCD Apps</h3>
+                          <div class="value" id="appCount">0</div>
+                          <small id="appStatus">Waiting...</small>
+                      </div>
+                      <div class="stat-card">
+                          <h3>☸️ Pods</h3>
+                          <div class="value" id="podCount">0</div>
+                          <small id="podStatus">Waiting...</small>
+                      </div>
+                      <div class="stat-card">
+                          <h3>✅ Ready Pods</h3>
+                          <div class="value" id="readyPods">0</div>
+                          <small>Running & Ready</small>
+                      </div>
+                      <div class="stat-card">
+                          <h3>📈 Progress</h3>
+                          <div class="value" id="progressPercent">0%</div>
+                          <small id="phaseSmall">Starting...</small>
+                      </div>
+                  </div>
+
+                  <div class="apps-section">
+                      <h2>🔄 ArgoCD Applications</h2>
+                      <div id="appsList">Loading...</div>
+                  </div>
+
+                  <div class="pods-section">
+                      <h2>☸️ Kubernetes Pods</h2>
+                      <div id="podsList">Loading...</div>
+                  </div>
+
+                  <div class="events-section">
+                      <h2>📝 Recent Events</h2>
+                      <div id="eventsList">Loading...</div>
+                  </div>
+
+                  <div class="progress-section">
+                      <h2>🧪 Quick Tests</h2>
+                      <div class="test-buttons">
+                          <button onclick="testEndpoint('health')">🏥 Health Check</button>
+                          <button onclick="testEndpoint('predict')">🤖 Test Prediction</button>
+                          <button onclick="testEndpoint('metrics')">📊 View Metrics</button>
+                      </div>
+                      <div id="testResult" style="display: none;"></div>
+                  </div>
+              </div>
+
+              <script>
+                  const eventSource = new EventSource('/api/stream');
+
+                  eventSource.onmessage = function(event) {
+                      const data = JSON.parse(event.data);
+                      updateDashboard(data);
+                  };
+
+                  function updateDashboard(data) {
+                      // Update progress
+                      document.getElementById('progressBar').style.width = data.progress + '%';
+                      document.getElementById('progressBar').textContent = data.progress + '%';
+                      document.getElementById('phaseText').textContent = data.phase;
+                      document.getElementById('phaseSmall').textContent = data.phase;
+                      document.getElementById('progressPercent').textContent = data.progress + '%';
+
+                      // Update elapsed time
+                      const minutes = Math.floor(data.elapsed / 60);
+                      const seconds = data.elapsed % 60;
+                      document.getElementById('elapsed').textContent =
+                          `Elapsed: ${minutes}m ${seconds}s`;
+
+                      // Update apps
+                      document.getElementById('appCount').textContent = data.argocd_apps.length;
+                      const syncedApps = data.argocd_apps.filter(a => a.sync === 'Synced').length;
+                      document.getElementById('appStatus').textContent =
+                          `${syncedApps}/${data.argocd_apps.length} Synced`;
+
+                      // Update pods
+                      document.getElementById('podCount').textContent = data.pods.length;
+                      const runningPods = data.pods.filter(p => p.status === 'Running').length;
+                      const readyPods = data.pods.filter(p => {
+                          const [ready, total] = p.ready.split('/').map(Number);
+                          return ready === total && ready > 0;
+                      }).length;
+                      document.getElementById('podStatus').textContent =
+                          `${runningPods}/${data.pods.length} Running`;
+                      document.getElementById('readyPods').textContent = readyPods;
+
+                      // Update apps list
+                      updateAppsList(data.argocd_apps);
+
+                      // Update pods list
+                      updatePodsList(data.pods);
+
+                      // Update events
+                      updateEventsList(data.events);
+                  }
+
+                  function updateAppsList(apps) {
+                      const container = document.getElementById('appsList');
+                      if (apps.length === 0) {
+                          container.innerHTML = '<p>No applications yet...</p>';
+                          return;
+                      }
+
+                      container.innerHTML = apps.map(app => `
+                          <div class="app-item">
+                              <div>
+                                  <strong>${app.name}</strong>
+                                  <small style="opacity: 0.7; margin-left: 10px;">${app.revision}</small>
+                              </div>
+                              <div>
+                                  <span class="status-badge status-${app.sync.toLowerCase()}">${app.sync}</span>
+                                  <span class="status-badge status-${app.health.toLowerCase()}">${app.health}</span>
+                              </div>
+                          </div>
+                      `).join('');
+                  }
+
+                  function updatePodsList(pods) {
+                      const container = document.getElementById('podsList');
+                      if (pods.length === 0) {
+                          container.innerHTML = '<p>No pods yet...</p>';
+                          return;
+                      }
+
+                      container.innerHTML = pods.map(pod => `
+                          <div class="pod-item">
+                              <div>
+                                  <strong>${pod.name}</strong>
+                                  <br>
+                                  <small style="opacity: 0.7;">${pod.namespace}</small>
+                              </div>
+                              <div style="text-align: right;">
+                                  <span class="status-badge status-${pod.status.toLowerCase()}">${pod.status}</span>
+                                  <br>
+                                  <small style="opacity: 0.7; margin-top: 5px; display: inline-block;">
+                                      ${pod.ready} Ready
+                                  </small>
+                              </div>
+                          </div>
+                      `).join('');
+                  }
+
+                  function updateEventsList(events) {
+                      const container = document.getElementById('eventsList');
+                      if (events.length === 0) {
+                          container.innerHTML = '<p>No recent events...</p>';
+                          return;
+                      }
+
+                      container.innerHTML = events.reverse().map(event => {
+                          const time = event.time ? new Date(event.time).toLocaleTimeString() : 'Unknown';
+                          return `
+                              <div class="event-item">
+                                  <div style="flex: 1;">
+                                      <span class="timestamp">[${time}]</span>
+                                      <strong style="margin-left: 10px;">${event.reason}</strong>
+                                      <br>
+                                      <small style="opacity: 0.8; margin-left: 80px;">${event.message}</small>
+                                  </div>
+                                  <span class="status-badge" style="background: rgba(255,255,255,0.2);">
+                                      ${event.namespace}
+                                  </span>
+                              </div>
+                          `;
+                      }).join('');
+                  }
+
+                  async function testEndpoint(endpoint) {
+                      const resultDiv = document.getElementById('testResult');
+                      resultDiv.style.display = 'block';
+                      resultDiv.textContent = 'Testing...';
+
+                      try {
+                          const response = await fetch(`/api/test/${endpoint}`);
+                          const data = await response.json();
+
+                          if (data.error) {
+                              resultDiv.textContent = `Error: ${data.error}`;
+                          } else {
+                              resultDiv.textContent = data.output;
+                          }
+                      } catch (error) {
+                          resultDiv.textContent = `Error: ${error.message}`;
+                      }
+                  }
+
+                  // Initial load
+                  fetch('/api/status')
+                      .then(r => r.json())
+                      .then(data => updateDashboard(data));
+              </script>
+          </body>
+          </html>
+          HTML_EOF
+
+          # Insert HTML into Python script
+          sed -i "/DASHBOARD_HTML =/d" /tmp/dashboard_server.py
+          echo "DASHBOARD_HTML = '''$(cat /tmp/dashboard.html)'''" >> /tmp/dashboard_server.py
+
+          echo "✅ Dashboard HTML created"
+
+      - name: 🎬 Start deployment and dashboard
+        run: |
+          # Start dashboard server in background
+          cd /tmp
+          python3 dashboard_server.py > /tmp/dashboard.log 2>&1 &
+          DASHBOARD_PID=$!
+          echo "Dashboard PID: $DASHBOARD_PID"
+
+          sleep 3
+
+          # Test dashboard is running
+          curl -f http://localhost:8080/ > /dev/null || {
+            echo "Dashboard failed to start!"
+            cat /tmp/dashboard.log
+            exit 1
+          }
+
+          echo "✅ Dashboard server started on port 8080"
+
+      - name: 🚀 Deploy applications via ArgoCD
+        run: |
+          echo "Creating namespaces..."
+          kubectl create namespace ml-inference || true
+          kubectl create namespace monitoring || true
+
+          echo "Creating ArgoCD applications..."
+
+          # Create ML Inference app
+          argocd app create ml-inference \
+            --repo https://github.com/${{ github.repository }}.git \
+            --path k8s/inference-service \
+            --revision ${{ github.ref_name }} \
+            --dest-server https://kubernetes.default.svc \
+            --dest-namespace ml-inference \
+            --sync-policy automated \
+            --self-heal \
+            --auto-prune \
+            --sync-option CreateNamespace=true || echo "App already exists"
+
+          # Create Observability app
+          argocd app create observability \
+            --repo https://github.com/${{ github.repository }}.git \
+            --path k8s/observability \
+            --revision ${{ github.ref_name }} \
+            --dest-server https://kubernetes.default.svc \
+            --dest-namespace monitoring \
+            --sync-policy automated \
+            --self-heal \
+            --auto-prune \
+            --sync-option CreateNamespace=true || echo "App already exists"
+
+          echo "✅ Applications created - watch them sync on the dashboard!"
+
+      - name: 🚇 Install Cloudflare Tunnel
+        run: |
+          wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+          chmod +x cloudflared-linux-amd64
+          sudo mv cloudflared-linux-amd64 /usr/local/bin/cloudflared
+          cloudflared version
+
+      - name: 🌍 Start Cloudflare Tunnel
+        run: |
+          echo "================================================"
+          echo "🌐 Starting Cloudflare Tunnel..."
+          echo "================================================"
+
+          cloudflared tunnel --url http://localhost:8080 > /tmp/cf-dashboard.log 2>&1 &
+          CF_PID=$!
+
+          sleep 10
+
+          echo ""
+          echo "================================================"
+          echo "🎭 LIVE GITOPS DASHBOARD URL:"
+          echo "================================================"
+          grep -o 'https://[^ ]*\.trycloudflare.com' /tmp/cf-dashboard.log | head -1
+          echo "================================================"
+          echo ""
+          echo "⏰ Dashboard will remain open for ${{ inputs.duration }} minutes"
+          echo "   Watch your GitOps deployment in real-time!"
+          echo ""
+
+          # Keep tunnel alive
+          sleep $(( ${{ inputs.duration }} * 60 ))
+
+      - name: 📊 Show final status
+        if: always()
+        run: |
+          echo "=== Final Deployment Status ==="
+          argocd app list || true
+          kubectl get all -n ml-inference || true
+          kubectl get all -n monitoring || true
+
+          echo -e "\n=== Dashboard Logs ==="
+          tail -50 /tmp/dashboard.log || true
+
+      - name: ✅ Cleanup
+        if: always()
+        run: |
+          pkill -f dashboard_server.py || true
+          pkill cloudflared || true
+          echo "✅ Cleanup complete"
