@@ -1,6 +1,6 @@
 # GitOps ML Infrastructure Demo
 
-[![GitOps Demo](https://github.com/GITHUB_USERNAME/eks-ml-inference-platform/actions/workflows/gitops-demo.yml/badge.svg)](https://github.com/GITHUB_USERNAME/eks-ml-inference-platform/actions/workflows/gitops-demo.yml)
+[![GitOps Demo](https://github.com/jonasneves/gitops-ml-infra-demo/actions/workflows/gitops-demo.yml/badge.svg)](https://github.com/jonasneves/gitops-ml-infra-demo/actions/workflows/gitops-demo.yml)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 **A production-ready ML infrastructure demo using GitOps practices with ArgoCD, Kubernetes, and GitHub Actions.**
@@ -106,8 +106,8 @@ Watch as the system:
 # Prerequisites: Docker, kubectl, minikube
 
 # 1. Clone repository
-git clone https://github.com/YOUR_USERNAME/eks-ml-inference-platform.git
-cd eks-ml-inference-platform
+git clone https://github.com/jonasneves/gitops-ml-infra-demo.git
+cd gitops-ml-infra-demo
 
 # 2. Start Minikube
 minikube start --cpus=2 --memory=4096 --kubernetes-version=v1.28.0
@@ -126,7 +126,7 @@ kubectl port-forward svc/argocd-server -n argocd 8080:443
 
 # 6. Deploy via ArgoCD
 argocd app create ml-inference \
-  --repo https://github.com/YOUR_USERNAME/eks-ml-inference-platform \
+  --repo https://github.com/jonasneves/gitops-ml-infra-demo \
   --path k8s/inference-service \
   --dest-server https://kubernetes.default.svc \
   --dest-namespace ml-inference \

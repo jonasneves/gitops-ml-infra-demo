@@ -23,7 +23,7 @@ spec:
     spec:
       containers:
       - name: ml-inference
-        image: ghcr.io/GITHUB_USERNAME/ml-inference:latest
+        image: ghcr.io/jonasneves/ml-inference:latest
         imagePullPolicy: Always
         ports:
         - name: http
