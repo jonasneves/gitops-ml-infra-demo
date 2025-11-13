@@ -1,18 +1,18 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: prometheus-config
+  name: victoriametrics-config
   namespace: monitoring
 data:
-  prometheus.yml: |
+  scrape.yml: |
     global:
       scrape_interval: 15s
       evaluation_interval: 15s
 
     scrape_configs:
-      - job_name: 'prometheus'
+      - job_name: 'victoriametrics'
         static_configs:
-          - targets: ['localhost:9090']
+          - targets: ['localhost:8428']
 
       - job_name: 'ml-inference'
         kubernetes_sd_configs:
@@ -46,49 +46,60 @@ data:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: prometheus
+  name: victoriametrics
   namespace: monitoring
   labels:
-    app: prometheus
+    app: victoriametrics
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: prometheus
+      app: victoriametrics
   template:
     metadata:
       labels:
-        app: prometheus
+        app: victoriametrics
     spec:
-      serviceAccountName: prometheus
+      serviceAccountName: victoriametrics
       containers:
-      - name: prometheus
-        image: prom/prometheus:v2.48.0
+      - name: victoriametrics
+        image: victoriametrics/victoria-metrics:v1.96.0
         args:
-          - '--config.file=/etc/prometheus/prometheus.yml'
-          - '--storage.tsdb.path=/prometheus'
-          - '--web.console.libraries=/etc/prometheus/console_libraries'
-          - '--web.console.templates=/etc/prometheus/consoles'
-          - '--storage.tsdb.retention.time=7d'
+          - '-storageDataPath=/victoria-metrics-data'
+          - '-retentionPeriod=7d'
+          - '-promscrape.config=/etc/victoriametrics/scrape.yml'
+          - '-httpListenAddr=:8428'
         ports:
-        - containerPort: 9090
+        - containerPort: 8428
           name: http
         volumeMounts:
         - name: config
-          mountPath: /etc/prometheus
+          mountPath: /etc/victoriametrics
         - name: storage
-          mountPath: /prometheus
+          mountPath: /victoria-metrics-data
         resources:
           requests:
-            memory: "256Mi"
-            cpu: "100m"
+            memory: "128Mi"
+            cpu: "50m"
           limits:
-            memory: "512Mi"
-            cpu: "500m"
+            memory: "256Mi"
+            cpu: "250m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8428
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8428
+          initialDelaySeconds: 5
+          periodSeconds: 5
       volumes:
       - name: config
         configMap:
-          name: prometheus-config
+          name: victoriametrics-config
       - name: storage
         emptyDir: {}
 
@@ -96,32 +107,32 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: prometheus
+  name: victoriametrics
   namespace: monitoring
   labels:
-    app: prometheus
+    app: victoriametrics
 spec:
   type: ClusterIP
   ports:
-  - port: 9090
-    targetPort: 9090
+  - port: 8428
+    targetPort: 8428
     protocol: TCP
     name: http
   selector:
-    app: prometheus
+    app: victoriametrics
 
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: prometheus
+  name: victoriametrics
   namespace: monitoring
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: prometheus
+  name: victoriametrics
 rules:
 - apiGroups: [""]
   resources:
@@ -143,12 +154,12 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: prometheus
+  name: victoriametrics
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: prometheus
+  name: victoriametrics
 subjects:
 - kind: ServiceAccount
-  name: prometheus
+  name: victoriametrics
   namespace: monitoring

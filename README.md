@@ -13,8 +13,8 @@ This project implements a complete MLOps infrastructure stack featuring:
 
 - **GitOps Deployment**: ArgoCD continuously syncs Kubernetes manifests from Git
 - **Automated CI/CD**: Parallelized GitHub Actions workflows for build, deploy, test, and demo phases
-- **ML Inference Service**: FastAPI-based sentiment analysis API with Prometheus metrics
-- **Observability Stack**: Prometheus monitoring and Grafana visualization
+- **ML Inference Service**: FastAPI-based sentiment analysis API with Prometheus-compatible metrics
+- **Observability Stack**: VictoriaMetrics monitoring and Grafana visualization
 - **Live Dashboard**: Real-time deployment progress tracking via Server-Sent Events
 - **Public Exposure**: Cloudflare Tunnel integration for external access
 - **Self-Healing**: Automatic drift detection and correction
@@ -42,13 +42,13 @@ The infrastructure runs on Minikube within GitHub Actions runners, demonstrating
 │  │  │   (2-5 replicas, HPA)        │ │  │
 │  │  │   - FastAPI                  │ │  │
 │  │  │   - Sentiment Analysis       │ │  │
-│  │  │   - Prometheus Metrics       │ │  │
+│  │  │   - Metrics Exposition       │ │  │
 │  │  └──────────────────────────────┘ │  │
 │  │                                    │  │
 │  │  ┌──────────────────────────────┐ │  │
 │  │  │   Observability Stack        │ │  │
-│  │  │   - Prometheus (metrics)     │ │  │
-│  │  │   - Grafana (visualization)  │ │  │
+│  │  │   - VictoriaMetrics          │ │  │
+│  │  │   - Grafana                  │ │  │
 │  │  └──────────────────────────────┘ │  │
 │  └───────────────────────────────────┘  │
 └─────────────────────────────────────────┘
@@ -104,7 +104,7 @@ Jobs run in parallel after build completion. Dashboard job provides real-time pu
 - **Resource Management**: CPU and memory requests/limits for optimal scheduling
 
 ### Observability
-- **Prometheus**: Metrics collection from application and infrastructure
+- **VictoriaMetrics**: High-performance metrics collection and storage (Prometheus-compatible)
 - **Grafana**: Visualization dashboards for monitoring
 - **Custom Metrics**: Application-specific instrumentation
 - **Service Discovery**: Automatic endpoint detection via pod annotations
@@ -184,7 +184,7 @@ argocd app create ml-inference \
 │   │   └── hpa.yaml                   # Horizontal Pod Autoscaler
 │   │
 │   └── observability/                 # Monitoring stack
-│       ├── prometheus-deployment.yaml
+│       ├── victoriametrics-deployment.yaml
 │       └── grafana-deployment.yaml
 │
 ├── docs/
@@ -227,7 +227,7 @@ The workflow includes an automated self-healing test:
 - **Resource Constraints**: CPU and memory requests/limits for proper scheduling
 - **Horizontal Scaling**: HPA automatically adjusts replicas based on utilization
 - **Pod Anti-Affinity**: Distribute pods across nodes for high availability
-- **Custom Metrics**: Prometheus instrumentation for monitoring
+- **Custom Metrics**: Prometheus-compatible metrics instrumentation for monitoring
 
 ## Deployed Services
 
@@ -239,7 +239,7 @@ FastAPI-based sentiment analysis service with the following endpoints:
 - `GET /ready` - Readiness check for traffic routing
 - `POST /predict` - Single text sentiment analysis
 - `POST /predict/batch` - Batch processing for multiple texts
-- `GET /metrics` - Prometheus metrics exposition
+- `GET /metrics` - Prometheus-compatible metrics exposition
 
 **Example request:**
 ```bash
@@ -261,7 +261,10 @@ curl -X POST http://localhost:8000/predict \
 
 ### Observability Stack
 
-- **Prometheus**: Metrics collection with 15-second scrape interval
+- **VictoriaMetrics**: High-performance time-series database with 15-second scrape interval
+  - Prometheus-compatible query language (PromQL)
+  - Lower resource usage compared to Prometheus
+  - Better compression and faster queries
 - **Grafana**: Visualization dashboards
 - **Metrics tracked**:
   - Request rate and throughput
@@ -298,7 +301,7 @@ Interactive debugging via tmate for troubleshooting:
 | **Container Orchestration** | Kubernetes (Minikube) |
 | **CI/CD** | GitHub Actions |
 | **ML Framework** | FastAPI, Python |
-| **Monitoring** | Prometheus, Grafana |
+| **Monitoring** | VictoriaMetrics, Grafana |
 | **Container Registry** | GitHub Container Registry (GHCR) |
 | **Languages** | Python, YAML, Bash |
 
