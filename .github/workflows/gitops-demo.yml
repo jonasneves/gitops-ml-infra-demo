@@ -734,10 +734,10 @@ jobs:
           import json
           import time
           import threading
-          
+
           app = Flask(__name__)
           CORS(app)
-          
+
           deployment_state = {
               "start_time": time.time(),
               "argocd_apps": [],
@@ -746,48 +746,48 @@ jobs:
               "progress": 0,
               "phase": "Initializing"
           }
-          
+
           def run_command(cmd):
               try:
                   result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=5)
                   return result.stdout.strip()
               except:
                   return ""
-          
+
           def get_argocd_status():
               try:
                   output = run_command("argocd app list -o json 2>/dev/null || echo '[]'")
                   if output and output != '[]':
-            apps = json.loads(output)
-            return [{"name": app.get("metadata", {}).get("name", "unknown"),
-                     "sync": app.get("status", {}).get("sync", {}).get("status", "Unknown"),
-                     "health": app.get("status", {}).get("health", {}).get("status", "Unknown")}
-                    for app in apps]
+                      apps = json.loads(output)
+                      return [{"name": app.get("metadata", {}).get("name", "unknown"),
+                               "sync": app.get("status", {}).get("sync", {}).get("status", "Unknown"),
+                               "health": app.get("status", {}).get("health", {}).get("status", "Unknown")}
+                              for app in apps]
               except:
                   pass
               return []
-          
+
           def get_pods_status():
               try:
                   output = run_command("kubectl get pods -A -o json 2>/dev/null")
                   if output:
-            data = json.loads(output)
-            pods = []
-            for item in data.get("items", []):
-                ns = item["metadata"]["namespace"]
-                if ns in ["ml-inference", "monitoring", "argocd"]:
-                    ready = "0/0"
-                    if "containerStatuses" in item["status"]:
-                        total = len(item["status"]["containerStatuses"])
-                        ready_count = sum(1 for c in item["status"]["containerStatuses"] if c.get("ready"))
-                        ready = f"{ready_count}/{total}"
-                    pods.append({"namespace": ns, "name": item["metadata"]["name"],
-                                "status": item["status"]["phase"], "ready": ready})
-            return pods
+                      data = json.loads(output)
+                      pods = []
+                      for item in data.get("items", []):
+                          ns = item["metadata"]["namespace"]
+                          if ns in ["ml-inference", "monitoring", "argocd"]:
+                              ready = "0/0"
+                              if "containerStatuses" in item["status"]:
+                                  total = len(item["status"]["containerStatuses"])
+                                  ready_count = sum(1 for c in item["status"]["containerStatuses"] if c.get("ready"))
+                                  ready = f"{ready_count}/{total}"
+                              pods.append({"namespace": ns, "name": item["metadata"]["name"],
+                                          "status": item["status"]["phase"], "ready": ready})
+                      return pods
               except:
                   pass
               return []
-          
+
           def calculate_progress():
               apps = deployment_state["argocd_apps"]
               pods = deployment_state["pods"]
@@ -799,26 +799,26 @@ jobs:
               score = (synced / max(len(apps), 1)) * 50 + (healthy / max(len(apps), 1)) * 30
               score += (running / max(len(pods), 1)) * 20 if pods else 0
               return min(int(score), 100)
-          
+
           def update_state():
               while True:
                   try:
-            deployment_state["argocd_apps"] = get_argocd_status()
-            deployment_state["pods"] = get_pods_status()
-            deployment_state["progress"] = calculate_progress()
-            p = deployment_state["progress"]
-            if p < 30:
-                deployment_state["phase"] = "Initializing"
-            elif p < 70:
-                deployment_state["phase"] = "Syncing Applications"
-            elif p < 100:
-                deployment_state["phase"] = "Starting Services"
-            else:
-                deployment_state["phase"] = "Deployment Complete"
+                      deployment_state["argocd_apps"] = get_argocd_status()
+                      deployment_state["pods"] = get_pods_status()
+                      deployment_state["progress"] = calculate_progress()
+                      p = deployment_state["progress"]
+                      if p < 30:
+                          deployment_state["phase"] = "Initializing"
+                      elif p < 70:
+                          deployment_state["phase"] = "Syncing Applications"
+                      elif p < 100:
+                          deployment_state["phase"] = "Starting Services"
+                      else:
+                          deployment_state["phase"] = "Deployment Complete"
                   except:
-            pass
+                      pass
                   time.sleep(3)
-          
+
           threading.Thread(target=update_state, daemon=True).start()
           
           @app.route('/')
@@ -909,12 +909,12 @@ jobs:
           def stream():
               def generate():
                   while True:
-            elapsed = int(time.time() - deployment_state["start_time"])
-            data = {**deployment_state, "elapsed": elapsed, "events": [], "start_time": None}
-            yield f"data: {json.dumps(data)}\n\n"
-            time.sleep(3)
+                      elapsed = int(time.time() - deployment_state["start_time"])
+                      data = {**deployment_state, "elapsed": elapsed, "events": [], "start_time": None}
+                      yield f"data: {json.dumps(data)}\n\n"
+                      time.sleep(3)
               return Response(generate(), mimetype='text/event-stream')
-          
+
           if __name__ == '__main__':
               app.run(host='0.0.0.0', port=8080, debug=False)
           PYEOF
@@ -928,7 +928,15 @@ jobs:
         run: |
           python3 /tmp/dashboard_server.py > /tmp/dashboard.log 2>&1 &
           sleep 3
-          curl -f http://localhost:8080/ > /dev/null && echo "✅ Dashboard running on port 8080"
+          curl -f http://localhost:8080/ > /dev/null && echo "✅ Dashboard running on port 8080" || {
+            echo "❌ Dashboard failed to start!"
+            echo "=== Python file content (first 50 lines) ==="
+            head -50 /tmp/dashboard_server.py | cat -A
+            echo ""
+            echo "=== Dashboard error logs ==="
+            cat /tmp/dashboard.log
+            exit 1
+          }
 
       - name: 🚀 Deploy applications
         run: |
