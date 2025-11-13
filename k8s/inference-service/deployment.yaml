@@ -24,7 +24,7 @@ spec:
       containers:
       - name: ml-inference
         image: ghcr.io/jonasneves/ml-inference:latest
-        imagePullPolicy: Always
+        imagePullPolicy: IfNotPresent
         ports:
         - name: http
           containerPort: 8000
