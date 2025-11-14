@@ -66,8 +66,14 @@ def calculate_progress():
     synced = sum(1 for app in apps if app["sync"] == "Synced")
     healthy = sum(1 for app in apps if app["health"] == "Healthy")
     running = sum(1 for pod in pods if pod["status"] == "Running")
-    score = (synced / max(len(apps), 1)) * 50 + (healthy / max(len(apps), 1)) * 30
-    score += (running / max(len(pods), 1)) * 20 if pods else 0
+    ready = sum(1 for pod in pods if pod["ready"] != "0/0" and pod["ready"].split("/")[0] == pod["ready"].split("/")[1])
+
+    # More granular scoring
+    score = (synced / max(len(apps), 1)) * 40  # 40% for sync
+    score += (healthy / max(len(apps), 1)) * 30  # 30% for health
+    score += (running / max(len(pods), 1)) * 20 if pods else 0  # 20% for running
+    score += (ready / max(len(pods), 1)) * 10 if pods else 0  # 10% for ready
+
     return min(int(score), 100)
 
 def update_state():
@@ -77,14 +83,22 @@ def update_state():
             deployment_state["pods"] = get_pods_status()
             deployment_state["progress"] = calculate_progress()
             p = deployment_state["progress"]
-            if p < 30:
-                deployment_state["phase"] = "Initializing"
+
+            # Determine phase with more detail
+            pods = deployment_state["pods"]
+            running_count = sum(1 for pod in pods if pod["status"] == "Running")
+            pending_count = sum(1 for pod in pods if pod["status"] == "Pending")
+
+            if p < 20:
+                deployment_state["phase"] = "Initializing ArgoCD"
             elif p < 70:
                 deployment_state["phase"] = "Syncing Applications"
+            elif pending_count > 0:
+                deployment_state["phase"] = f"Starting Pods ({running_count}/{len(pods)} running)"
             elif p < 100:
-                deployment_state["phase"] = "Starting Services"
+                deployment_state["phase"] = "Pods Starting - Waiting for Ready"
             else:
-                deployment_state["phase"] = "Deployment Complete"
+                deployment_state["phase"] = "Deployment Complete ✅"
         except:
             pass
         time.sleep(3)
@@ -175,6 +189,15 @@ eventSource.onmessage = function(e) {
 </body></html>'''
     return html
 
+@app.route('/api/status')
+def status():
+    """Get current status as JSON"""
+    elapsed = int(time.time() - deployment_state["start_time"])
+    return jsonify({
+        **deployment_state,
+        "elapsed": elapsed
+    })
+
 @app.route('/api/stream')
 def stream():
     def generate():
@@ -184,6 +207,35 @@ def stream():
             yield f"data: {json.dumps(data)}\n\n"
             time.sleep(3)
     return Response(generate(), mimetype='text/event-stream')
+
+@app.route('/api/debug')
+def debug():
+    """Debug endpoint to see detailed pod statuses"""
+    pods_detail = []
+    for pod in deployment_state["pods"]:
+        pods_detail.append({
+            "name": pod["name"],
+            "namespace": pod["namespace"],
+            "status": pod["status"],
+            "ready": pod["ready"],
+            "is_running": pod["status"] == "Running",
+            "is_ready": pod["ready"] != "0/0" and pod["ready"].split("/")[0] == pod["ready"].split("/")[1]
+        })
+
+    return jsonify({
+        "argocd_apps": deployment_state["argocd_apps"],
+        "pods": pods_detail,
+        "progress": deployment_state["progress"],
+        "phase": deployment_state["phase"],
+        "summary": {
+            "total_apps": len(deployment_state["argocd_apps"]),
+            "synced_apps": sum(1 for app in deployment_state["argocd_apps"] if app["sync"] == "Synced"),
+            "healthy_apps": sum(1 for app in deployment_state["argocd_apps"] if app["health"] == "Healthy"),
+            "total_pods": len(deployment_state["pods"]),
+            "running_pods": sum(1 for pod in deployment_state["pods"] if pod["status"] == "Running"),
+            "ready_pods": sum(1 for pod in deployment_state["pods"] if pod["ready"] != "0/0" and pod["ready"].split("/")[0] == pod["ready"].split("/")[1])
+        }
+    })
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080, debug=False)
