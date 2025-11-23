@@ -2,6 +2,10 @@
 
 [![GitOps Demo](https://github.com/jonasneves/gitops-ml-infra-demo/actions/workflows/gitops-demo.yml/badge.svg)](https://github.com/jonasneves/gitops-ml-infra-demo/actions/workflows/gitops-demo.yml)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![ArgoCD](https://img.shields.io/badge/ArgoCD-EF7B4D?logo=argo&logoColor=white)](https://argoproj.github.io/cd/)
+[![Kubernetes](https://img.shields.io/badge/Kubernetes-326CE5?logo=kubernetes&logoColor=white)](https://kubernetes.io/)
+[![Python](https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white)](https://python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 
 **Production-grade ML infrastructure implementing GitOps practices with ArgoCD, Kubernetes, and automated CI/CD pipelines.**
 
@@ -74,7 +78,6 @@ Jobs run in parallel after build completion for optimal performance.
 .
 ├── .github/workflows/
 │   ├── gitops-demo.yml              # Main GitOps workflow
-│   ├── live-gitops-dashboard.yml    # Standalone dashboard
 │   ├── live-server.yml              # Public hosting via Cloudflare
 │   └── debug-ssh-access.yml         # SSH debugging
 │
