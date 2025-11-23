@@ -65,15 +65,29 @@ Benefits:
 
 ### 2. Single Tunnel Routing
 
-**Problem:** Multiple runners can't share one tunnel token effectively (Cloudflare load-balances between them).
+**Problem:** Multiple runners can't share one tunnel token effectively (Cloudflare load-balances between them by geography, not hostname).
 
-**Current workaround:** Separate tunnel per runner.
+**Current solution:** Separate tunnel per runner (recommended).
 
-**Potential solutions:**
-- Named tunnels with config files (each runner specifies its routes)
-- Cloudflare Access service tokens for routing
-- Single tunnel runner that proxies to others
-- Use tunnel connector ID to distinguish runners
+**Why separate tunnels work best:**
+- Simple, reliable, no coordination needed
+- Each runner fully owns its routes
+- No race conditions or API complexity
+- Minimal overhead (create tunnel in dashboard, add secret)
+
+**Alternative - API-based coordination:**
+```
+PUT /accounts/{account_id}/cfd_tunnel/{tunnel_id}/configurations
+```
+Each runner could dynamically register routes via Cloudflare API. However:
+- Requires API token with tunnel write permissions
+- Creates race conditions (config overwrites)
+- Needs fetch-merge-push coordination
+- Added complexity not worth it for this use case
+
+**References:**
+- [Cloudflare Tunnel Configuration API](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/get-started/create-remote-tunnel-api/)
+- [Tunnel Availability and Failover](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/configure-tunnels/tunnel-availability/)
 
 ### 3. Inter-Runner Communication
 
@@ -161,7 +175,7 @@ Good for: Multi-region demos, latency testing
 
 ## Implementation Priorities
 
-1. **Solve single tunnel routing** - Most impactful, enables true modularity
+1. ~~**Solve single tunnel routing**~~ - Solved: use separate tunnels per runner
 2. **Service discovery mechanism** - Required for components to communicate
 3. **Dependency coordination** - Ensures reliable startup order
 4. **Split into component workflows** - Final implementation
