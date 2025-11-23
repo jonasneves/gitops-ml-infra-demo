@@ -28,43 +28,48 @@ Built entirely on GitHub Actions free tier, this project demonstrates modern inf
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────┐
-│       GitHub Actions Runner              │
-│  ┌───────────────────────────────────┐  │
-│  │      Minikube Cluster             │  │
-│  │                                    │  │
-│  │  ┌──────────────────────────────┐ │  │
-│  │  │         ArgoCD               │ │  │
-│  │  │   (GitOps Controller)        │ │  │
-│  │  └────────┬─────────────────────┘ │  │
-│  │           │ watches & syncs       │  │
-│  │           ▼                        │  │
-│  │  ┌──────────────────────────────┐ │  │
-│  │  │   ML Inference Service       │ │  │
-│  │  │   (HPA-scaled replicas)      │ │  │
-│  │  └──────────────────────────────┘ │  │
-│  │                                    │  │
-│  │  ┌──────────────────────────────┐ │  │
-│  │  │   Observability Stack        │ │  │
-│  │  │   VictoriaMetrics + Grafana  │ │  │
-│  │  └──────────────────────────────┘ │  │
-│  └───────────────────────────────────┘  │
-└─────────────────────────────────────────┘
+```mermaid
+graph TB
+    subgraph GitHub["GitHub Actions Runner"]
+        subgraph Cluster["Minikube Cluster"]
+            ArgoCD["ArgoCD<br/>(GitOps Controller)"]
+            ML["ML Inference Service<br/>(HPA-scaled replicas)"]
+            Obs["Observability Stack<br/>(VictoriaMetrics + Grafana)"]
+
+            ArgoCD -->|watches & syncs| ML
+        end
+    end
+
+    Git["Git Repository<br/>(Kubernetes Manifests)"] -->|monitors| ArgoCD
+
+    style ArgoCD fill:#ef7b4d,stroke:#333,stroke-width:2px,color:#fff
+    style ML fill:#009688,stroke:#333,stroke-width:2px,color:#fff
+    style Obs fill:#326ce5,stroke:#333,stroke-width:2px,color:#fff
+    style Git fill:#f05032,stroke:#333,stroke-width:2px,color:#fff
 ```
 
 ### CI/CD Pipeline
 
-```
-Build Job (8 min)
-    │
-    ├──────────────┬──────────────┬──────────────┐
-    │              │              │              │
-Deploy Job    Test Job      Demo Job     Dashboard Job
-    │              │              │              │
-    └──────────────┴──────────────┴──────────────┘
-                           │
-                      Report Job
+```mermaid
+graph TB
+    Build["Build Job<br/>(8 min)"]
+    Deploy["Deploy Job"]
+    Test["Test Job"]
+    Demo["Demo Job"]
+    Report["Report Job"]
+
+    Build --> Deploy
+    Build --> Test
+    Build --> Demo
+    Deploy --> Report
+    Test --> Report
+    Demo --> Report
+
+    style Build fill:#3776ab,stroke:#333,stroke-width:2px,color:#fff
+    style Deploy fill:#326ce5,stroke:#333,stroke-width:2px,color:#fff
+    style Test fill:#009688,stroke:#333,stroke-width:2px,color:#fff
+    style Demo fill:#ef7b4d,stroke:#333,stroke-width:2px,color:#fff
+    style Report fill:#f05032,stroke:#333,stroke-width:2px,color:#fff
 ```
 
 Jobs run in parallel after build completion for optimal performance.
@@ -131,8 +136,8 @@ Automatic drift detection and correction when cluster state diverges from Git-de
 - **[API Reference](docs/API.md)** - ML inference endpoints and examples
 - **[Deployment Guide](docs/DEPLOYMENT.md)** - Local and CI/CD setup
 - **[Workflow Architecture](docs/WORKFLOW-ARCHITECTURE.md)** - CI/CD pipeline design
-- **[Live Dashboard](docs/LIVE-DASHBOARD.md)** - Real-time monitoring
 - **[Live Server](docs/LIVE-SERVER.md)** - Public hosting via Cloudflare Tunnel
+- **[Modular Infrastructure](docs/MODULAR-INFRASTRUCTURE.md)** - Distributed architecture patterns
 - **[Debug Workflow](docs/DEBUG-WORKFLOW.md)** - SSH-based debugging
 
 ## License
