@@ -4,19 +4,25 @@ Host the complete GitOps infrastructure publicly using GitHub Actions and Cloudf
 
 ## Overview
 
-This workflow runs two parallel jobs on separate GitHub Actions runners:
+Modular workflow architecture with three workflow files:
 
-**Host Runner:**
+```
+live-server.yml       # Orchestrator - runs both components
+├── live-host.yml     # Host runner (can run standalone)
+└── live-monitoring.yml # Monitoring runner (can run standalone)
+```
+
+**Host Runner (`live-host.yml`):**
 - Minikube Kubernetes cluster
 - ArgoCD GitOps controller
 - ML Inference API
 - Live Dashboard
 
-**Monitoring Runner:**
+**Monitoring Runner (`live-monitoring.yml`):**
 - VictoriaMetrics (metrics storage)
 - Grafana (dashboards)
 
-This architecture enables better resource distribution and independent scaling of monitoring components.
+Run everything together via `live-server.yml`, or run components independently for selective deployment.
 
 ## Prerequisites
 

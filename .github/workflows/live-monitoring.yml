@@ -1,0 +1,213 @@
+name: Live Monitoring
+
+run-name: "Live Monitoring - Metrics & Dashboards"
+
+on:
+  workflow_dispatch:
+    inputs:
+      duration_hours:
+        description: 'How long to run (max 5.5 hours)'
+        required: false
+        default: '5.5'
+      base_domain:
+        description: 'Base domain for services (e.g., example.com)'
+        required: false
+        default: ''
+  workflow_call:
+    inputs:
+      duration_hours:
+        type: string
+        default: '5.5'
+      base_domain:
+        type: string
+        default: ''
+
+concurrency:
+  group: live-monitoring
+  cancel-in-progress: true
+
+jobs:
+  monitoring:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+
+    steps:
+      - name: Display service registry
+        run: |
+          echo "=== Service Registry (Monitoring Runner) ==="
+          BASE_DOMAIN="${{ inputs.base_domain }}"
+          if [ -n "$BASE_DOMAIN" ]; then
+            echo "Grafana:         https://grafana.${BASE_DOMAIN}"
+            echo "VictoriaMetrics: https://metrics.${BASE_DOMAIN}"
+            echo ""
+            echo "Scraping from:   https://ml-api.${BASE_DOMAIN}"
+          else
+            echo "Grafana:         http://localhost:3000"
+            echo "VictoriaMetrics: http://localhost:8428"
+            echo ""
+            echo "Note: Set base_domain input for public URLs"
+          fi
+          echo "============================================="
+
+      - name: Cache cloudflared
+        uses: actions/cache@v4
+        id: cloudflared-cache
+        with:
+          path: /usr/local/bin/cloudflared
+          key: cloudflared-linux-amd64-v1
+
+      - name: Install cloudflared
+        if: steps.cloudflared-cache.outputs.cache-hit != 'true'
+        run: |
+          curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o cloudflared
+          chmod +x cloudflared
+          sudo mv cloudflared /usr/local/bin/
+
+      - name: Wait for ML API (dependency coordination)
+        run: |
+          BASE_DOMAIN="${{ inputs.base_domain }}"
+          if [ -n "$BASE_DOMAIN" ]; then
+            ML_API_URL="https://ml-api.${BASE_DOMAIN}/health"
+            echo "Waiting for ML API at ${ML_API_URL}..."
+
+            MAX_ATTEMPTS=60
+            ATTEMPT=0
+
+            while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+              if curl -sf -k "$ML_API_URL" > /dev/null 2>&1; then
+                echo "ML API is ready!"
+                break
+              fi
+
+              ATTEMPT=$((ATTEMPT + 1))
+              echo "Attempt ${ATTEMPT}/${MAX_ATTEMPTS} - ML API not ready, waiting 10s..."
+              sleep 10
+            done
+
+            if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
+              echo "Warning: ML API not available after ${MAX_ATTEMPTS} attempts"
+              echo "Proceeding anyway - metrics scraping may fail initially"
+            fi
+          else
+            echo "No base_domain set, skipping dependency check"
+          fi
+
+      - name: Create VictoriaMetrics config
+        run: |
+          mkdir -p /tmp/vm-config
+
+          # Derive ML API URL from base domain
+          BASE_DOMAIN="${{ inputs.base_domain }}"
+          if [ -n "$BASE_DOMAIN" ]; then
+            ML_API_TARGET="ml-api.${BASE_DOMAIN}"
+            SCHEME="https"
+          else
+            ML_API_TARGET="localhost:8000"
+            SCHEME="http"
+          fi
+
+          cat > /tmp/vm-config/prometheus.yml << EOF
+          global:
+            scrape_interval: 15s
+
+          scrape_configs:
+            - job_name: 'ml-inference'
+              metrics_path: '/metrics'
+              static_configs:
+                - targets: ['${ML_API_TARGET}']
+              scheme: ${SCHEME}
+              tls_config:
+                insecure_skip_verify: true
+          EOF
+
+          echo "VictoriaMetrics config created (target: ${ML_API_TARGET})"
+          cat /tmp/vm-config/prometheus.yml
+
+      - name: Run monitoring stack
+        continue-on-error: true
+        run: |
+          set -e
+
+          cleanup() {
+            echo "=== Shutting down monitoring ==="
+            docker stop victoriametrics grafana 2>/dev/null || true
+            pkill -f cloudflared || true
+            exit 0
+          }
+          trap cleanup SIGTERM SIGINT
+
+          # Start VictoriaMetrics
+          docker run -d --name victoriametrics \
+            -p 8428:8428 \
+            -v /tmp/vm-config:/etc/prometheus \
+            victoriametrics/victoria-metrics:latest \
+            -promscrape.config=/etc/prometheus/prometheus.yml
+
+          # Start Grafana
+          docker run -d --name grafana \
+            -p 3000:3000 \
+            -e GF_SECURITY_ADMIN_PASSWORD=admin \
+            -e GF_AUTH_ANONYMOUS_ENABLED=true \
+            grafana/grafana:latest
+
+          sleep 10
+
+          # Configure Grafana datasource
+          curl -X POST http://localhost:3000/api/datasources \
+            -H "Content-Type: application/json" \
+            -u admin:admin \
+            -d '{
+              "name": "VictoriaMetrics",
+              "type": "prometheus",
+              "url": "http://172.17.0.1:8428",
+              "access": "proxy",
+              "isDefault": true
+            }' || true
+
+          # Start tunnel (requires CLOUDFLARE_TUNNEL_TOKEN_MONITORING secret)
+          if [ -n "${{ secrets.CLOUDFLARE_TUNNEL_TOKEN_MONITORING }}" ]; then
+            cloudflared tunnel --no-autoupdate run --token ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN_MONITORING }} 2>&1 | tee /tmp/tunnel.log &
+          else
+            echo "No monitoring tunnel token - services only accessible locally"
+          fi
+
+          sleep 5
+
+          HOURS="${{ inputs.duration_hours || '5.5' }}"
+          DURATION=$(echo "$HOURS * 3600" | bc | cut -d. -f1)
+          START_TIME=$(date +%s)
+
+          echo ""
+          echo "=========================================="
+          echo "Monitoring runner for $HOURS hours"
+          echo "  - Grafana:         localhost:3000"
+          echo "  - VictoriaMetrics: localhost:8428"
+          echo ""
+          echo "Grafana: admin / admin"
+          echo "=========================================="
+
+          while true; do
+            ELAPSED=$(($(date +%s) - START_TIME))
+
+            VM_OK=$(curl -sf http://localhost:8428/-/healthy > /dev/null 2>&1 && echo "OK" || echo "DOWN")
+            GRAFANA_OK=$(curl -sf http://localhost:3000/api/health > /dev/null 2>&1 && echo "OK" || echo "DOWN")
+
+            printf "[%s] VictoriaMetrics: %s | Grafana: %s | %dm/%dm\n" \
+              "$(date '+%H:%M:%S')" "$VM_OK" "$GRAFANA_OK" "$((ELAPSED/60))" "$((DURATION/60))"
+
+            # Restart if down
+            if [ "$VM_OK" = "DOWN" ]; then
+              docker restart victoriametrics || docker start victoriametrics
+              sleep 5
+            fi
+
+            if [ "$GRAFANA_OK" = "DOWN" ]; then
+              docker restart grafana || docker start grafana
+              sleep 5
+            fi
+
+            [ "$ELAPSED" -gt "$DURATION" ] && break
+            sleep 30
+          done
+
+          cleanup

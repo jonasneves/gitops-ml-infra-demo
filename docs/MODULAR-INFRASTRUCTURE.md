@@ -34,20 +34,32 @@ Two-component split in `live-server.yml`:
          └───── Cloudflare ──────┘
 ```
 
-## Future: Full Modular Split
+## Current Modular Structure
 
 ```
 .github/workflows/
-├── live-cluster.yml      # Minikube + ArgoCD
-├── live-dashboard.yml    # Dashboard server
+├── live-server.yml       # Orchestrator (calls both)
+├── live-host.yml         # Minikube + ArgoCD + Dashboard
 └── live-monitoring.yml   # VictoriaMetrics + Grafana
 ```
 
-Benefits:
-- Independent scaling per component
-- Selective restarts
-- Clear ownership
-- Better resource isolation
+**Benefits achieved:**
+- Independent lifecycle management
+- Run components separately or together
+- Clear ownership per workflow
+- Reusable via `workflow_call`
+
+**Usage:**
+```bash
+# Run everything
+gh workflow run live-server.yml -f base_domain=example.com
+
+# Run only host
+gh workflow run live-host.yml -f base_domain=example.com
+
+# Run only monitoring
+gh workflow run live-monitoring.yml -f base_domain=example.com
+```
 
 ## Challenges to Solve
 
@@ -216,7 +228,7 @@ Good for: Multi-region demos, latency testing
 1. ~~**Solve single tunnel routing**~~ - Solved: use separate tunnels per runner
 2. ~~**Service discovery mechanism**~~ - Solved: convention-based URL derivation from `base_domain`
 3. ~~**Dependency coordination**~~ - Solved: health check polling before dependent services
-4. **Split into component workflows** - Final implementation
+4. ~~**Split into component workflows**~~ - Solved: `live-host.yml`, `live-monitoring.yml`, orchestrated by `live-server.yml`
 
 ## Cost Considerations
 
