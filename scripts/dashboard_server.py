@@ -138,14 +138,25 @@ def index():
       startOnLoad: true,
       theme: 'base',
       themeVariables: {
-        primaryColor: '#e3f2fd',
-        primaryTextColor: '#202124',
-        primaryBorderColor: '#1a73e8',
-        lineColor: '#5f6368',
-        secondaryColor: '#f1f3f4',
-        tertiaryColor: '#fafafa',
-        fontSize: '14px',
-        fontFamily: 'Google Sans, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif'
+        primaryColor: '#E3F2FD',
+        primaryTextColor: '#1565C0',
+        primaryBorderColor: '#1976D2',
+        lineColor: '#424242',
+        secondaryColor: '#FFF3E0',
+        tertiaryColor: '#E8F5E9',
+        fontSize: '16px',
+        fontFamily: 'Google Sans, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif',
+        edgeLabelBackground: '#ffffff',
+        clusterBkg: '#ffffff',
+        clusterBorder: '#90A4AE'
+      },
+      flowchart: {
+        curve: 'basis',
+        padding: 20,
+        nodeSpacing: 80,
+        rankSpacing: 80,
+        diagramPadding: 20,
+        useMaxWidth: true
       }
     });
   </script>
@@ -357,6 +368,13 @@ def index():
       object-fit: contain;
     }
 
+    /* Colored icons for services */
+    .service-icon.argocd img { filter: none; }
+    .service-icon.ml-api img { fill: #EE4C2C; filter: invert(35%) sepia(94%) saturate(3065%) hue-rotate(354deg) brightness(97%) contrast(92%); }
+    .service-icon.dashboard img { filter: invert(42%) sepia(93%) saturate(1821%) hue-rotate(195deg) brightness(102%) contrast(97%); }
+    .service-icon.grafana img { filter: invert(55%) sepia(86%) saturate(2654%) hue-rotate(359deg) brightness(101%) contrast(101%); }
+    .service-icon.victoria img { filter: none; }
+
     .service-name {
       font-size: 14px;
       font-weight: 500;
@@ -380,15 +398,23 @@ def index():
     /* Architecture */
     .architecture {
       background: var(--bg-primary);
-      padding: 16px;
+      padding: 24px;
       border-radius: 6px;
       overflow-x: auto;
       display: flex;
       justify-content: center;
+      min-height: 500px;
     }
 
     .mermaid {
       background: transparent !important;
+      width: 100%;
+      min-height: 450px;
+    }
+
+    .mermaid svg {
+      max-width: 100%;
+      height: auto;
     }
 
     /* Apps and Pods Lists */
@@ -538,37 +564,43 @@ def index():
       <div class="card-body">
         <div class="architecture">
           <div class="mermaid">
+%%{init: {'theme':'base', 'themeVariables': {'primaryBorderColor':'#1976D2','lineColor':'#616161'}}}%%
 graph TB
-    CF[Cloudflare Edge]
+    CF([Cloudflare Edge])
 
-    subgraph Host["Host Runner"]
-        MK[Minikube]
-        subgraph K8s["Kubernetes Cluster"]
-            AC[ArgoCD]
-            ML[ML API]
+    subgraph Host["🖥️ Host Runner"]
+        direction TB
+        MK([Minikube])
+        subgraph K8s["☸️ Kubernetes Cluster"]
+            direction LR
+            AC([ArgoCD])
+            ML([ML API])
         end
-        DASH[Dashboard]
+        DASH([Dashboard])
     end
 
-    subgraph MON["Monitoring Runner"]
-        VM[VictoriaMetrics]
-        GR[Grafana]
+    subgraph MON["📊 Monitoring Runner"]
+        direction TB
+        VM([VictoriaMetrics])
+        GR([Grafana])
     end
 
-    CF --> Host
-    CF --> MON
-    MK --> K8s
+    CF -.->|HTTPS| Host
+    CF -.->|HTTPS| MON
+    MK ==>|hosts| K8s
+    K8s -.->|metrics| VM
+    VM -->|data| GR
 
-    style CF fill:#f9a825,stroke:#f57f17,stroke-width:2px
-    style Host fill:#e3f2fd,stroke:#1a73e8,stroke-width:2px
-    style MON fill:#e8f5e9,stroke:#34a853,stroke-width:2px
-    style K8s fill:#f1f3f4,stroke:#5f6368,stroke-width:1px
-    style MK fill:#fff,stroke:#1a73e8,stroke-width:1px
-    style AC fill:#fff,stroke:#ff7043,stroke-width:1px
-    style ML fill:#fff,stroke:#1a73e8,stroke-width:1px
-    style DASH fill:#fff,stroke:#1a73e8,stroke-width:1px
-    style VM fill:#fff,stroke:#34a853,stroke-width:1px
-    style GR fill:#fff,stroke:#ff6f00,stroke-width:1px
+    style CF fill:#FFB74D,stroke:#F57C00,stroke-width:3px,color:#000
+    style Host fill:#E3F2FD,stroke:#1976D2,stroke-width:3px,rx:15,ry:15
+    style MON fill:#E8F5E9,stroke:#43A047,stroke-width:3px,rx:15,ry:15
+    style K8s fill:#FFF3E0,stroke:#FB8C00,stroke-width:2px,rx:10,ry:10
+    style MK fill:#BBDEFB,stroke:#1976D2,stroke-width:2px,color:#0D47A1
+    style AC fill:#FFCCBC,stroke:#E64A19,stroke-width:2px,color:#BF360C
+    style ML fill:#C5E1A5,stroke:#689F38,stroke-width:2px,color:#33691E
+    style DASH fill:#B3E5FC,stroke:#0288D1,stroke-width:2px,color:#01579B
+    style VM fill:#C8E6C9,stroke:#43A047,stroke-width:2px,color:#1B5E20
+    style GR fill:#FFAB91,stroke:#FF5722,stroke-width:2px,color:#BF360C
           </div>
         </div>
       </div>
@@ -604,7 +636,8 @@ graph TB
       {
         name: 'ArgoCD',
         desc: 'GitOps Controller',
-        logo: 'https://cncf-branding.netlify.app/img/projects/argo/icon/color/argo-icon-color.svg',
+        logo: 'https://landscape.cncf.io/logos/argo.svg',
+        iconClass: 'argocd',
         port: 8443,
         subdomain: 'argocd',
         https: true
@@ -613,6 +646,7 @@ graph TB
         name: 'ML API',
         desc: 'Inference Service',
         logo: 'https://cdn.jsdelivr.net/npm/simple-icons@v11/icons/pytorch.svg',
+        iconClass: 'ml-api',
         port: 8000,
         subdomain: 'ml-api',
         https: false
@@ -621,6 +655,7 @@ graph TB
         name: 'Dashboard',
         desc: 'This Dashboard',
         logo: 'https://cdn.jsdelivr.net/npm/simple-icons@v11/icons/kubernetes.svg',
+        iconClass: 'dashboard',
         port: 8080,
         subdomain: 'gitops',
         https: false
@@ -629,6 +664,7 @@ graph TB
         name: 'Grafana',
         desc: 'Metrics Visualization',
         logo: 'https://cdn.jsdelivr.net/npm/simple-icons@v11/icons/grafana.svg',
+        iconClass: 'grafana',
         port: 3000,
         subdomain: 'grafana',
         https: false
@@ -636,7 +672,8 @@ graph TB
       {
         name: 'VictoriaMetrics',
         desc: 'Time Series DB',
-        logo: 'https://docs.victoriametrics.com/logo.png',
+        logo: 'https://raw.githubusercontent.com/VictoriaMetrics/VictoriaMetrics/master/docs/logo.png',
+        iconClass: 'victoria',
         port: 8428,
         subdomain: 'metrics',
         https: false
@@ -647,25 +684,27 @@ graph TB
     function renderServices() {
       const container = document.getElementById('serviceRegistry');
       container.innerHTML = services.map(svc => {
-        let url;
+        let url, displayUrl;
         if (BASE_DOMAIN) {
-          const protocol = svc.https ? 'https' : 'https';
+          const protocol = svc.https ? 'https' : 'http';
           url = `${protocol}://${svc.subdomain}.${BASE_DOMAIN}`;
+          displayUrl = url; // Show full URL with protocol when using custom domain
         } else {
           const protocol = svc.https ? 'https' : 'http';
           url = `${protocol}://localhost:${svc.port}`;
+          displayUrl = `localhost:${svc.port}`; // Show cleaner format for localhost
         }
 
         return `
           <div class="service-item">
             <div class="service-info">
-              <div class="service-icon"><img src="${svc.logo}" alt="${svc.name}" onerror="this.style.display='none'"/></div>
+              <div class="service-icon ${svc.iconClass}"><img src="${svc.logo}" alt="${svc.name}" onerror="this.style.display='none'"/></div>
               <div>
                 <div class="service-name">${svc.name}</div>
                 <div class="service-desc">${svc.desc}</div>
               </div>
             </div>
-            <a href="${url}" target="_blank" class="service-url">${url.replace('https://', '').replace('http://', '')}</a>
+            <a href="${url}" target="_blank" class="service-url">${displayUrl}</a>
           </div>
         `;
       }).join('');
