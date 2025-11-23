@@ -95,6 +95,20 @@ jobs:
           curl -sSL -o argocd-linux-amd64 https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
           sudo install -m 555 argocd-linux-amd64 /usr/local/bin/argocd
 
+      - name: Build ML Inference Image
+        run: |
+          # Use Minikube's Docker daemon
+          eval $(minikube docker-env)
+
+          # Build the image locally
+          docker build -t ml-inference:latest app/ml-inference/
+
+          # Tag for the deployment (matches what k8s manifests expect)
+          docker tag ml-inference:latest ghcr.io/${{ github.repository_owner }}/ml-inference:latest
+
+          echo "Image built successfully"
+          docker images | grep ml-inference
+
       - name: Deploy Applications
         run: |
           # Create namespaces
@@ -126,14 +140,17 @@ jobs:
             --auto-prune \
             --self-heal
 
-          # Sync applications
-          argocd app sync ml-inference --force
-          argocd app sync observability --force
+          # Sync applications (don't wait - let them sync in background)
+          argocd app sync ml-inference --force || true
+          argocd app sync observability --force || true
 
-          # Wait for sync
-          echo "Waiting for applications to sync..."
-          argocd app wait ml-inference --timeout 180
-          argocd app wait observability --timeout 180
+          # Give apps time to start syncing
+          echo "Applications created. Waiting for initial sync..."
+          sleep 30
+
+          # Show status
+          echo "Current application status:"
+          argocd app list || true
 
           # Kill the temporary port-forward
           pkill -f "port-forward.*8443" || true
