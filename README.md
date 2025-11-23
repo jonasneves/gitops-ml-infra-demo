@@ -5,9 +5,10 @@
 [![Python](https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white)](https://python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 
+**CI/CD Pipeline:**</br>
 [![GitOps Demo](https://github.com/jonasneves/gitops-ml-infra-demo/actions/workflows/gitops-demo.yml/badge.svg)](https://github.com/jonasneves/gitops-ml-infra-demo/actions/workflows/gitops-demo.yml)
 
-**Live Status:**
+**Live Status:**</br>
 [![Deployment](https://img.shields.io/endpoint?url=https://gitops.neevs.io/api/badge/deployment)](https://gitops.neevs.io)
 [![ArgoCD](https://img.shields.io/endpoint?url=https://gitops.neevs.io/api/badge/argocd)](https://gitops.neevs.io)
 [![Health](https://img.shields.io/endpoint?url=https://gitops.neevs.io/api/badge/health)](https://gitops.neevs.io)
