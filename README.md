@@ -4,6 +4,7 @@
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-326CE5?logo=kubernetes&logoColor=white)](https://kubernetes.io/)
 [![Python](https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white)](https://python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+
 [![GitOps Demo](https://github.com/jonasneves/gitops-ml-infra-demo/actions/workflows/gitops-demo.yml/badge.svg)](https://github.com/jonasneves/gitops-ml-infra-demo/actions/workflows/gitops-demo.yml)
 
 **Production-grade ML infrastructure implementing GitOps practices with ArgoCD, Kubernetes, and automated CI/CD pipelines.**
