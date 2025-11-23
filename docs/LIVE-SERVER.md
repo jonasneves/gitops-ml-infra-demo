@@ -1,14 +1,18 @@
 # Live Server Hosting
 
-Host the ML inference API and dashboard publicly using GitHub Actions and Cloudflare Tunnel.
+Host the complete GitOps infrastructure publicly using GitHub Actions and Cloudflare Tunnel.
 
 ## Overview
 
-This workflow runs the services on a GitHub Actions runner and exposes them via Cloudflare Tunnel, providing a public URL without any cloud infrastructure costs.
+This workflow runs the full stack on a GitHub Actions runner:
+- **Minikube** - Kubernetes cluster
+- **ArgoCD** - GitOps controller with UI
+- **ML Inference API** - FastAPI sentiment analysis
+- **Grafana** - Monitoring dashboards
+- **VictoriaMetrics** - Metrics storage
+- **Live Dashboard** - Real-time deployment monitoring
 
-**Services:**
-- ML Inference API (FastAPI) - port 8000
-- Live Dashboard (Flask) - port 8080
+All services are exposed via Cloudflare Tunnel for public access.
 
 ## Prerequisites
 
@@ -28,14 +32,17 @@ In Cloudflare Zero Trust dashboard:
 
 ### 2. Configure Public Hostnames
 
-Add public hostnames for your tunnel:
+Add public hostnames for each service:
 
-| Subdomain | Domain | Service |
-|-----------|--------|---------|
-| `ml-demo` | `yourdomain.com` | `HTTP://localhost:8080` |
-| `ml-api` | `yourdomain.com` | `HTTP://localhost:8000` |
+| Subdomain | Domain | Service | Type |
+|-----------|--------|---------|------|
+| `gitops` | `yourdomain.com` | `http://localhost:8080` | HTTP |
+| `argocd` | `yourdomain.com` | `https://localhost:8443` | HTTPS |
+| `ml-api` | `yourdomain.com` | `http://localhost:8000` | HTTP |
+| `grafana` | `yourdomain.com` | `http://localhost:3000` | HTTP |
+| `metrics` | `yourdomain.com` | `http://localhost:8428` | HTTP |
 
-Or use path-based routing with a single hostname.
+**Note:** For ArgoCD, enable "No TLS Verify" in the tunnel settings since it uses a self-signed certificate.
 
 ### 3. Add GitHub Secret
 
@@ -52,12 +59,24 @@ Cloudflare Edge
     │
     └── Tunnel ── GitHub Actions Runner
                       │
-                      ├── Dashboard :8080 (Flask)
-                      │   └── Real-time deployment monitoring
+                      ├── Minikube Cluster
+                      │   ├── ArgoCD (GitOps)
+                      │   ├── ML Inference (FastAPI)
+                      │   ├── VictoriaMetrics
+                      │   └── Grafana
                       │
-                      └── ML API :8000 (FastAPI)
-                          └── Sentiment analysis endpoints
+                      └── Dashboard (Flask)
 ```
+
+## Services
+
+| Service | Port | Description |
+|---------|------|-------------|
+| Dashboard | 8080 | Real-time deployment monitoring |
+| ArgoCD UI | 8443 | GitOps controller interface |
+| ML API | 8000 | Sentiment analysis endpoints |
+| Grafana | 3000 | Metrics visualization |
+| VictoriaMetrics | 8428 | Prometheus-compatible TSDB |
 
 ## Usage
 
@@ -67,6 +86,7 @@ Cloudflare Edge
 2. Select "Live Server"
 3. Click "Run workflow"
 4. Configure duration and auto-restart
+5. Check logs for ArgoCD password
 
 ### Start via CLI
 
@@ -83,64 +103,92 @@ gh workflow run live-server.yml -f auto_restart=false
 
 ### Auto-trigger
 
-The workflow automatically starts when changes are pushed to:
+The workflow starts when changes are pushed to:
 - `app/ml-inference/**`
+- `k8s/**`
 - `scripts/dashboard_server.py`
 
-## 6-Hour Timeout Handling
+## ArgoCD Access
 
-GitHub Actions has a 6-hour job limit. The workflow handles this by:
+The ArgoCD admin password is displayed in the workflow logs:
 
-1. Running for 5.5 hours by default
-2. Triggering a new workflow 5 minutes before timeout
-3. New runner takes over with fresh tunnel connection
+```
+ArgoCD Credentials:
+  Username: admin
+  Password: <generated-password>
+```
 
-This provides near-continuous availability without manual intervention.
+Features available:
+- View application sync status
+- Trigger manual syncs
+- View Kubernetes resources
+- Check application health
+- View sync history
 
 ## Monitoring
 
 The workflow outputs health status every 30 seconds:
 
 ```
-[14:32:15] API: OK | Dashboard: OK | Tunnel: OK | Elapsed: 45m | Remaining: 285m
+[14:32:15] ArgoCD: OK | API: OK | Grafana: OK | Dashboard: OK | Tunnel: OK | 45m/330m
 ```
 
-Services are automatically restarted if they go down.
+Every 5 iterations, it also shows ArgoCD application status:
 
-## Endpoints
+```
+--- ArgoCD Apps ---
+NAME           SYNC STATUS   HEALTH STATUS
+ml-inference   Synced        Healthy
+observability  Synced        Healthy
+-------------------
+```
 
-### ML Inference API
+## 6-Hour Timeout Handling
 
-- `GET /health` - Health check
-- `GET /ready` - Readiness check
-- `POST /predict` - Single text sentiment analysis
-- `POST /predict/batch` - Batch prediction
-- `GET /metrics` - Prometheus metrics
+GitHub Actions has a 6-hour limit. The workflow:
 
-### Dashboard
+1. Runs for 5.5 hours by default
+2. Triggers restart 5 minutes before timeout
+3. New runner takes over (services restart fresh)
 
-- `GET /` - Live monitoring UI
-- `GET /api/status` - Current deployment state
-- `GET /api/stream` - SSE event stream
-- `GET /api/debug` - Detailed debug info
+**Note:** There will be ~3-5 minute downtime during restarts while Minikube and ArgoCD initialize.
+
+## Grafana Dashboards
+
+Default credentials:
+- Username: `admin`
+- Password: `admin`
+
+Pre-configured data source: VictoriaMetrics
+
+## Troubleshooting
+
+### ArgoCD not accessible
+
+Check the tunnel configuration has "No TLS Verify" enabled for the ArgoCD hostname (it uses self-signed certs).
+
+### Applications not syncing
+
+View ArgoCD logs:
+```bash
+kubectl logs -n argocd -l app.kubernetes.io/name=argocd-application-controller
+```
+
+### Port-forward keeps dying
+
+The workflow auto-restarts failed port-forwards. Check the workflow logs for specific errors.
+
+### Services slow to start
+
+Initial setup takes ~5 minutes:
+- Minikube start: ~2 min
+- ArgoCD install: ~2 min
+- App sync: ~1 min
 
 ## Limitations
 
 - Not for production workloads
-- ~30 second cold start when no runner is active
+- ~5 minute cold start for full stack
+- ArgoCD password changes on each restart
 - GitHub Actions minutes consumption
-- Tunnel connection may briefly drop during restarts
-
-## Troubleshooting
-
-### Tunnel not connecting
-
-Check the tunnel token is correctly set in GitHub secrets.
-
-### Services crashing
-
-View workflow logs for error details. The workflow automatically restarts crashed services.
-
-### High latency
-
-GitHub Actions runners are shared infrastructure. Response times may vary.
+- Brief downtime during auto-restart rotation
