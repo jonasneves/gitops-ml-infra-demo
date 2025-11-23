@@ -6,21 +6,34 @@ Host the complete GitOps infrastructure publicly using GitHub Actions and Cloudf
 
 Modular workflow architecture with three workflow files:
 
-```
-live-server.yml       # Orchestrator - runs both components
-├── live-host.yml     # Host runner (can run standalone)
-└── live-monitoring.yml # Monitoring runner (can run standalone)
-```
+```mermaid
+graph TB
+    Orchestrator["live-server.yml<br/>(Orchestrator)"]
+    Host["live-host.yml<br/>(Host Runner)"]
+    Mon["live-monitoring.yml<br/>(Monitoring Runner)"]
 
-**Host Runner (`live-host.yml`):**
-- Minikube Kubernetes cluster
-- ArgoCD GitOps controller
-- ML Inference API
-- Live Dashboard
+    Orchestrator --> Host
+    Orchestrator --> Mon
 
-**Monitoring Runner (`live-monitoring.yml`):**
-- VictoriaMetrics (metrics storage)
-- Grafana (dashboards)
+    subgraph HostComponents["Host Components"]
+        Minikube["Minikube Cluster"]
+        ArgoCD["ArgoCD"]
+        ML["ML Inference API"]
+        Dashboard["Live Dashboard"]
+    end
+
+    subgraph MonComponents["Monitoring Components"]
+        VM["VictoriaMetrics"]
+        Grafana["Grafana"]
+    end
+
+    Host -.-> HostComponents
+    Mon -.-> MonComponents
+
+    style Orchestrator fill:#3498db,stroke:#333,stroke-width:2px,color:#fff
+    style Host fill:#2ecc71,stroke:#333,stroke-width:2px,color:#fff
+    style Mon fill:#9c27b0,stroke:#333,stroke-width:2px,color:#fff
+```
 
 Run everything together via `live-server.yml`, or run components independently for selective deployment.
 
@@ -70,23 +83,46 @@ Create two tunnels - one for each runner:
 
 ## Architecture
 
-```
-Internet
-    │
-Cloudflare Edge
-    │
-    ├── Tunnel 1 ── Host Runner
-    │                   │
-    │                   ├── Minikube Cluster
-    │                   │   ├── ArgoCD (GitOps)
-    │                   │   └── ML Inference (FastAPI)
-    │                   │
-    │                   └── Dashboard (Flask)
-    │
-    └── Tunnel 2 ── Monitoring Runner
-                        │
-                        ├── VictoriaMetrics (Docker)
-                        └── Grafana (Docker)
+```mermaid
+graph TB
+    Internet["Public Internet"]
+
+    subgraph Cloudflare["Cloudflare Network"]
+        Edge["Cloudflare Edge"]
+        Tunnel1["Tunnel 1<br/>(Host)"]
+        Tunnel2["Tunnel 2<br/>(Monitoring)"]
+    end
+
+    subgraph HostRunner["GitHub Actions: Host Runner"]
+        subgraph K8s["Minikube Cluster"]
+            ArgoCD["ArgoCD<br/>(GitOps)"]
+            ML["ML Inference<br/>(FastAPI)"]
+        end
+        Dashboard["Live Dashboard<br/>(Python)"]
+    end
+
+    subgraph MonRunner["GitHub Actions: Monitoring Runner"]
+        VM["VictoriaMetrics<br/>(Docker)"]
+        Grafana["Grafana<br/>(Docker)"]
+    end
+
+    Internet --> Edge
+    Edge --> Tunnel1
+    Edge --> Tunnel2
+    Tunnel1 --> Dashboard
+    Tunnel1 --> ArgoCD
+    Tunnel1 --> ML
+    Tunnel2 --> VM
+    Tunnel2 --> Grafana
+
+    VM -.->|scrapes| ML
+
+    style Internet fill:#e0e0e0,stroke:#333,stroke-width:2px
+    style Edge fill:#ff9800,stroke:#333,stroke-width:2px,color:#fff
+    style HostRunner fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    style MonRunner fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    style ArgoCD fill:#ef7b4d,stroke:#333,stroke-width:2px,color:#fff
+    style ML fill:#009688,stroke:#333,stroke-width:2px,color:#fff
 ```
 
 ## Services
@@ -180,13 +216,25 @@ Services auto-restart if they go down.
 
 ## 6-Hour Timeout Handling
 
-GitHub Actions has a 6-hour limit. The workflow:
+GitHub Actions has a 6-hour limit. The workflow handles this automatically:
 
-1. Runs for 5.5 hours by default
-2. Triggers restart 5 minutes before timeout
-3. New runner takes over (services restart fresh)
+```mermaid
+sequenceDiagram
+    participant W1 as Workflow Run 1
+    participant GH as GitHub Actions
+    participant W2 as Workflow Run 2
 
-**Note:** There will be ~3-5 minute downtime during restarts while Minikube and ArgoCD initialize.
+    W1->>W1: Run for 5.5 hours
+    Note over W1: 5 min before timeout
+    W1->>GH: Trigger workflow_dispatch
+    W1->>W1: Graceful shutdown
+    GH->>W2: Start new workflow run
+    W2->>W2: Initialize (3-5 min)
+    Note over W2: Services ready
+    W2->>W2: Run for 5.5 hours
+```
+
+**Note:** Brief downtime (~3-5 minutes) during transitions while Minikube and ArgoCD initialize.
 
 ## Grafana Dashboards
 

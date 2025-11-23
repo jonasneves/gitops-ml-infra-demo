@@ -19,19 +19,44 @@ Each workflow file defines an independent component that can be:
 
 ## Current Implementation
 
-Two-component split in `live-server.yml`:
+Two-component split orchestrated by `live-server.yml`:
 
-```
-┌─────────────────┐     ┌─────────────────┐
-│   Host Runner   │     │Monitoring Runner│
-├─────────────────┤     ├─────────────────┤
-│ Minikube        │     │ VictoriaMetrics │
-│ ArgoCD          │     │ Grafana         │
-│ ML API          │     │                 │
-│ Dashboard       │     │                 │
-└────────┬────────┘     └────────┬────────┘
-         │                       │
-         └───── Cloudflare ──────┘
+```mermaid
+graph TB
+    subgraph Internet["Public Internet"]
+        CF["Cloudflare Edge Network"]
+    end
+
+    subgraph HostRunner["Host Runner"]
+        Minikube["Minikube Cluster"]
+        ArgoCD["ArgoCD"]
+        ML["ML API"]
+        Dashboard["Live Dashboard"]
+        Tunnel1["Cloudflare Tunnel 1"]
+
+        Minikube --> ArgoCD
+        Minikube --> ML
+    end
+
+    subgraph MonitoringRunner["Monitoring Runner"]
+        VM["VictoriaMetrics"]
+        Grafana["Grafana"]
+        Tunnel2["Cloudflare Tunnel 2"]
+    end
+
+    CF --> Tunnel1
+    CF --> Tunnel2
+    Tunnel1 --> Dashboard
+    Tunnel1 --> ArgoCD
+    Tunnel1 --> ML
+    Tunnel2 --> VM
+    Tunnel2 --> Grafana
+
+    VM -.->|scrapes| ML
+
+    style HostRunner fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    style MonitoringRunner fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    style CF fill:#ff9800,stroke:#333,stroke-width:2px,color:#fff
 ```
 
 ## Current Modular Structure
@@ -69,13 +94,27 @@ gh workflow run live-monitoring.yml -f base_domain=example.com
 
 **Current solution:** Convention-based URL derivation from `base_domain` input.
 
+```mermaid
+graph LR
+    Base["base_domain<br/>example.com"]
+
+    Base --> ML["ml-api.example.com"]
+    Base --> Grafana["grafana.example.com"]
+    Base --> ArgoCD["argocd.example.com"]
+    Base --> Metrics["metrics.example.com"]
+    Base --> Dashboard["gitops.example.com"]
+
+    style Base fill:#3498db,stroke:#333,stroke-width:2px,color:#fff
+    style ML fill:#009688,stroke:#333,stroke-width:2px,color:#fff
+    style Grafana fill:#f39c12,stroke:#333,stroke-width:2px,color:#fff
+    style ArgoCD fill:#ef7b4d,stroke:#333,stroke-width:2px,color:#fff
+    style Metrics fill:#9c27b0,stroke:#333,stroke-width:2px,color:#fff
+    style Dashboard fill:#e91e63,stroke:#333,stroke-width:2px,color:#fff
+```
+
 **How it works:**
 - User provides single `base_domain` input (e.g., `example.com`)
-- All service URLs derived by convention:
-  - `ml-api.example.com`
-  - `grafana.example.com`
-  - `argocd.example.com`
-  - etc.
+- All service URLs derived by convention
 - Each job displays its service registry at startup
 - No runtime discovery needed - URLs are deterministic
 
@@ -133,6 +172,21 @@ Each runner could dynamically register routes via Cloudflare API. However:
 **Problem:** Some components must start before others (e.g., ML API before monitoring).
 
 **Current solution:** Health check polling before dependent services start.
+
+```mermaid
+sequenceDiagram
+    participant Host as Host Runner
+    participant ML as ML API
+    participant Mon as Monitoring Runner
+    participant VM as VictoriaMetrics
+
+    Host->>ML: Start ML API
+    Mon->>ML: Health check poll
+    Note over Mon: Wait up to 10 minutes<br/>(60 attempts × 10s)
+    ML-->>Mon: Health check success
+    Mon->>VM: Start VictoriaMetrics
+    VM->>ML: Begin scraping metrics
+```
 
 **How it works:**
 - Monitoring runner polls ML API health endpoint

@@ -2,7 +2,35 @@
 
 ## GitHub Actions (Recommended)
 
-The primary workflow runs the complete infrastructure stack with zero setup:
+The primary workflow runs the complete infrastructure stack with zero setup.
+
+### Deployment Flow
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant GHA as GitHub Actions
+    participant Build as Build Job
+    participant Deploy as Deploy Job
+    participant ArgoCD
+    participant K8s as Kubernetes
+
+    User->>GHA: Trigger workflow
+    GHA->>Build: Start build job
+    Build->>Build: Build Docker image
+    Build->>Build: Push to GHCR
+    Build->>Deploy: Image ready
+
+    Deploy->>Deploy: Start Minikube
+    Deploy->>Deploy: Install ArgoCD
+    Deploy->>ArgoCD: Deploy applications
+    ArgoCD->>K8s: Sync manifests
+    K8s-->>ArgoCD: Sync complete
+    ArgoCD-->>Deploy: Applications healthy
+    Deploy-->>User: Deployment complete
+```
+
+### Steps
 
 1. Navigate to the [Actions tab](../../actions/workflows/gitops-demo.yml)
 2. Select "GitOps Infrastructure Demo"
@@ -16,10 +44,38 @@ The primary workflow runs the complete infrastructure stack with zero setup:
 
 ### Prerequisites
 
-- Docker
-- kubectl
-- Minikube
-- ArgoCD CLI (optional)
+| Tool | Purpose | Required |
+|------|---------|----------|
+| Docker | Container runtime | Yes |
+| kubectl | Kubernetes CLI | Yes |
+| Minikube | Local Kubernetes | Yes |
+| ArgoCD CLI | GitOps management | Optional |
+
+### Local Deployment Flow
+
+```mermaid
+graph TB
+    Start["Start"]
+    Minikube["Start Minikube<br/>(2 min)"]
+    ArgoCD["Install ArgoCD<br/>(2 min)"]
+    Password["Get Admin Password"]
+    Deploy["Deploy Application<br/>(1 min)"]
+    Access["Access Services"]
+    End["Ready"]
+
+    Start --> Minikube
+    Minikube --> ArgoCD
+    ArgoCD --> Password
+    Password --> Deploy
+    Deploy --> Access
+    Access --> End
+
+    style Start fill:#2ecc71,stroke:#333,stroke-width:2px,color:#fff
+    style End fill:#2ecc71,stroke:#333,stroke-width:2px,color:#fff
+    style Minikube fill:#326ce5,stroke:#333,stroke-width:2px,color:#fff
+    style ArgoCD fill:#ef7b4d,stroke:#333,stroke-width:2px,color:#fff
+    style Deploy fill:#009688,stroke:#333,stroke-width:2px,color:#fff
+```
 
 ### Quick Start
 
