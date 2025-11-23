@@ -4,19 +4,25 @@ Host the complete GitOps infrastructure publicly using GitHub Actions and Cloudf
 
 ## Overview
 
-This workflow runs two parallel jobs on separate GitHub Actions runners:
+Modular workflow architecture with three workflow files:
 
-**Host Runner:**
+```
+live-server.yml       # Orchestrator - runs both components
+├── live-host.yml     # Host runner (can run standalone)
+└── live-monitoring.yml # Monitoring runner (can run standalone)
+```
+
+**Host Runner (`live-host.yml`):**
 - Minikube Kubernetes cluster
 - ArgoCD GitOps controller
 - ML Inference API
 - Live Dashboard
 
-**Monitoring Runner:**
+**Monitoring Runner (`live-monitoring.yml`):**
 - VictoriaMetrics (metrics storage)
 - Grafana (dashboards)
 
-This architecture enables better resource distribution and independent scaling of monitoring components.
+Run everything together via `live-server.yml`, or run components independently for selective deployment.
 
 ## Prerequisites
 
@@ -122,9 +128,15 @@ gh workflow run live-server.yml -f duration_hours=2
 # Disable auto-restart
 gh workflow run live-server.yml -f auto_restart=false
 
-# With ML API URL for monitoring to scrape
-gh workflow run live-server.yml -f ml_api_url=ml-api.yourdomain.com
+# With base domain (enables service discovery)
+gh workflow run live-server.yml -f base_domain=yourdomain.com
 ```
+
+The `base_domain` input enables convention-based service discovery:
+- `ml-api.yourdomain.com`
+- `grafana.yourdomain.com`
+- `argocd.yourdomain.com`
+- etc.
 
 ### Auto-trigger
 
@@ -215,4 +227,3 @@ Initial setup takes ~5 minutes:
 - ArgoCD password changes on each restart
 - Uses 2x GitHub Actions runner minutes (parallel jobs)
 - Brief downtime during auto-restart rotation
-- Monitoring runner requires ML API public URL for metrics scraping
