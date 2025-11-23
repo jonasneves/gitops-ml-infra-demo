@@ -76,8 +76,14 @@ jobs:
           kubectl create namespace argocd
           kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
 
-          echo "Waiting for ArgoCD to be ready..."
-          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=argocd-server -n argocd --timeout=300s
+          echo "Waiting for ArgoCD deployments to be created..."
+          sleep 10
+
+          # Wait for deployments to exist
+          kubectl wait --for=condition=available deployment/argocd-server -n argocd --timeout=300s
+          kubectl wait --for=condition=available deployment/argocd-repo-server -n argocd --timeout=300s
+
+          echo "ArgoCD is ready"
 
           # Get admin password
           ARGOCD_PASSWORD=$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d)
