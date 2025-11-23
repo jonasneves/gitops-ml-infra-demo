@@ -55,13 +55,28 @@ Benefits:
 
 **Problem:** Runners are isolated. Components need to find each other.
 
-**Current workaround:** Pass URLs via workflow inputs (`ml_api_url`).
+**Current solution:** Convention-based URL derivation from `base_domain` input.
 
-**Potential solutions:**
-- Shared configuration file in repo
+**How it works:**
+- User provides single `base_domain` input (e.g., `example.com`)
+- All service URLs derived by convention:
+  - `ml-api.example.com`
+  - `grafana.example.com`
+  - `argocd.example.com`
+  - etc.
+- Each job displays its service registry at startup
+- No runtime discovery needed - URLs are deterministic
+
+**Why this works:**
+- Cloudflare hostnames are configured once, don't change
+- Convention over configuration reduces errors
+- Simple, no external dependencies
+
+**Alternative approaches (for dynamic scenarios):**
 - GitHub Actions cache as registry
 - External service registry (Redis, Consul)
-- Cloudflare Workers KV for coordination
+- GitHub Gist as coordination point
+- Cloudflare Workers KV
 
 ### 2. Single Tunnel Routing
 
@@ -176,7 +191,7 @@ Good for: Multi-region demos, latency testing
 ## Implementation Priorities
 
 1. ~~**Solve single tunnel routing**~~ - Solved: use separate tunnels per runner
-2. **Service discovery mechanism** - Required for components to communicate
+2. ~~**Service discovery mechanism**~~ - Solved: convention-based URL derivation from `base_domain`
 3. **Dependency coordination** - Ensures reliable startup order
 4. **Split into component workflows** - Final implementation
 

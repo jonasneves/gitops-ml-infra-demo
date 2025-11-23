@@ -122,9 +122,15 @@ gh workflow run live-server.yml -f duration_hours=2
 # Disable auto-restart
 gh workflow run live-server.yml -f auto_restart=false
 
-# With ML API URL for monitoring to scrape
-gh workflow run live-server.yml -f ml_api_url=ml-api.yourdomain.com
+# With base domain (enables service discovery)
+gh workflow run live-server.yml -f base_domain=yourdomain.com
 ```
+
+The `base_domain` input enables convention-based service discovery:
+- `ml-api.yourdomain.com`
+- `grafana.yourdomain.com`
+- `argocd.yourdomain.com`
+- etc.
 
 ### Auto-trigger
 
@@ -215,4 +221,3 @@ Initial setup takes ~5 minutes:
 - ArgoCD password changes on each restart
 - Uses 2x GitHub Actions runner minutes (parallel jobs)
 - Brief downtime during auto-restart rotation
-- Monitoring runner requires ML API public URL for metrics scraping

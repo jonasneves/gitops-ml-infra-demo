@@ -20,8 +20,8 @@ on:
         required: false
         default: 'true'
         type: boolean
-      ml_api_url:
-        description: 'ML API public URL for metrics scraping'
+      base_domain:
+        description: 'Base domain for services (e.g., example.com)'
         required: false
         default: ''
   repository_dispatch:
@@ -44,6 +44,23 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Display service registry
+        run: |
+          echo "=== Service Registry (Host Runner) ==="
+          BASE_DOMAIN="${{ github.event.inputs.base_domain }}"
+          if [ -n "$BASE_DOMAIN" ]; then
+            echo "Dashboard:  https://gitops.${BASE_DOMAIN}"
+            echo "ArgoCD:     https://argocd.${BASE_DOMAIN}"
+            echo "ML API:     https://ml-api.${BASE_DOMAIN}"
+          else
+            echo "Dashboard:  http://localhost:8080"
+            echo "ArgoCD:     https://localhost:8443"
+            echo "ML API:     http://localhost:8000"
+            echo ""
+            echo "Note: Set base_domain input for public URLs"
+          fi
+          echo "======================================="
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -214,6 +231,23 @@ jobs:
     timeout-minutes: 350
 
     steps:
+      - name: Display service registry
+        run: |
+          echo "=== Service Registry (Monitoring Runner) ==="
+          BASE_DOMAIN="${{ github.event.inputs.base_domain }}"
+          if [ -n "$BASE_DOMAIN" ]; then
+            echo "Grafana:         https://grafana.${BASE_DOMAIN}"
+            echo "VictoriaMetrics: https://metrics.${BASE_DOMAIN}"
+            echo ""
+            echo "Scraping from:   https://ml-api.${BASE_DOMAIN}"
+          else
+            echo "Grafana:         http://localhost:3000"
+            echo "VictoriaMetrics: http://localhost:8428"
+            echo ""
+            echo "Note: Set base_domain input for public URLs"
+          fi
+          echo "============================================="
+
       - name: Cache cloudflared
         uses: actions/cache@v4
         id: cloudflared-cache
@@ -231,7 +265,18 @@ jobs:
       - name: Create VictoriaMetrics config
         run: |
           mkdir -p /tmp/vm-config
-          cat > /tmp/vm-config/prometheus.yml << 'EOF'
+
+          # Derive ML API URL from base domain
+          BASE_DOMAIN="${{ github.event.inputs.base_domain }}"
+          if [ -n "$BASE_DOMAIN" ]; then
+            ML_API_TARGET="ml-api.${BASE_DOMAIN}"
+            SCHEME="https"
+          else
+            ML_API_TARGET="localhost:8000"
+            SCHEME="http"
+          fi
+
+          cat > /tmp/vm-config/prometheus.yml << EOF
           global:
             scrape_interval: 15s
 
@@ -239,13 +284,13 @@ jobs:
             - job_name: 'ml-inference'
               metrics_path: '/metrics'
               static_configs:
-                - targets: ['${{ github.event.inputs.ml_api_url || 'localhost:8000' }}']
-              scheme: https
+                - targets: ['${ML_API_TARGET}']
+              scheme: ${SCHEME}
               tls_config:
                 insecure_skip_verify: true
           EOF
 
-          echo "VictoriaMetrics config created"
+          echo "VictoriaMetrics config created (target: ${ML_API_TARGET})"
           cat /tmp/vm-config/prometheus.yml
 
       - name: Run monitoring stack
