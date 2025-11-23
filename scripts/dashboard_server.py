@@ -1,16 +1,33 @@
-from flask import Flask, Response, jsonify
+from flask import Flask, Response, jsonify, request
 from flask_cors import CORS
 import subprocess
 import json
 import time
 import threading
 import os
+import re
 
 app = Flask(__name__)
 CORS(app)
 
 # Get base domain from environment
 BASE_DOMAIN = os.environ.get('BASE_DOMAIN', '')
+
+def get_base_domain():
+    """Get the base domain, either from env or by detecting from request"""
+    if BASE_DOMAIN:
+        return BASE_DOMAIN
+
+    # Try to detect from request host
+    if request and request.host:
+        host = request.host.split(':')[0]  # Remove port if present
+        # Check if it's a subdomain pattern like gitops.example.com
+        match = re.match(r'^[^.]+\.(.+)$', host)
+        if match and not host.startswith('localhost') and not host.startswith('127.'):
+            # Extract base domain (everything after first subdomain)
+            return match.group(1)
+
+    return ''  # Default to empty (will use localhost URLs)
 
 deployment_state = {
     "start_time": time.time(),
@@ -395,13 +412,15 @@ def index():
       overflow-x: auto;
       display: flex;
       justify-content: center;
-      min-height: 500px;
+      align-items: center;
+      min-height: 400px;
     }
 
     .mermaid {
       background: transparent !important;
-      width: 100%;
-      min-height: 450px;
+      width: 80%;
+      max-width: 800px;
+      min-height: 360px;
     }
 
     .mermaid svg {
@@ -617,7 +636,7 @@ graph TB
   </div>
 
   <script>
-    const BASE_DOMAIN = ''' + json.dumps(BASE_DOMAIN) + ''';
+    const BASE_DOMAIN = ''' + json.dumps(get_base_domain()) + ''';
 
     // Service definitions with logo URLs
     const services = [
@@ -802,7 +821,7 @@ def status():
     return jsonify({
         **deployment_state,
         "elapsed": elapsed,
-        "base_domain": BASE_DOMAIN
+        "base_domain": get_base_domain()
     })
 
 @app.route('/api/stream')
