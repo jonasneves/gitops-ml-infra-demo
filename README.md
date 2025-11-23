@@ -12,7 +12,7 @@
 [![Health](https://img.shields.io/endpoint?url=https://gitops.neevs.io/api/badge/health)](https://gitops.neevs.io)
 [![Pods](https://img.shields.io/endpoint?url=https://gitops.neevs.io/api/badge/pods)](https://gitops.neevs.io)
 
-**Production-grade ML infrastructure implementing GitOps practices with ArgoCD, Kubernetes, and automated CI/CD pipelines.**
+**ML infrastructure implementing GitOps practices with ArgoCD, Kubernetes, and automated CI/CD pipelines.**
 
 Built entirely on GitHub Actions free tier, this project demonstrates modern infrastructure patterns including declarative deployments, self-healing systems, and real-time observability.
 
