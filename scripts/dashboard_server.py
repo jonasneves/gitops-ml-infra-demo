@@ -413,14 +413,14 @@ def index():
       display: flex;
       justify-content: center;
       align-items: center;
-      min-height: 400px;
+      min-height: 240px;
     }
 
     .mermaid {
       background: transparent !important;
-      width: 80%;
-      max-width: 800px;
-      min-height: 360px;
+      width: 48%;
+      max-width: 480px;
+      min-height: 216px;
     }
 
     .mermaid svg {
