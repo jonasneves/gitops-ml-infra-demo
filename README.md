@@ -75,6 +75,7 @@ Jobs run in parallel after build completion for optimal performance.
 ├── .github/workflows/
 │   ├── gitops-demo.yml              # Main GitOps workflow
 │   ├── live-gitops-dashboard.yml    # Standalone dashboard
+│   ├── live-server.yml              # Public hosting via Cloudflare
 │   └── debug-ssh-access.yml         # SSH debugging
 │
 ├── app/ml-inference/
@@ -122,6 +123,7 @@ Automatic drift detection and correction when cluster state diverges from Git-de
 - **[Deployment Guide](docs/DEPLOYMENT.md)** - Local and CI/CD setup
 - **[Workflow Architecture](docs/WORKFLOW-ARCHITECTURE.md)** - CI/CD pipeline design
 - **[Live Dashboard](docs/LIVE-DASHBOARD.md)** - Real-time monitoring
+- **[Live Server](docs/LIVE-SERVER.md)** - Public hosting via Cloudflare Tunnel
 - **[Debug Workflow](docs/DEBUG-WORKFLOW.md)** - SSH-based debugging
 
 ## License

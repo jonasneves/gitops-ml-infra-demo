@@ -1,0 +1,226 @@
+name: Live Server
+
+run-name: "Live Server - Public Demo"
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'app/ml-inference/**'
+      - 'scripts/dashboard_server.py'
+  workflow_dispatch:
+    inputs:
+      duration_hours:
+        description: 'How long to run (max 5.5 hours)'
+        required: false
+        default: '5.5'
+      auto_restart:
+        description: 'Auto-restart before timeout'
+        required: false
+        default: 'true'
+        type: boolean
+  repository_dispatch:
+    types: [restart-live-server]
+
+concurrency:
+  group: live-server
+  cancel-in-progress: true
+
+jobs:
+  host:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+
+    permissions:
+      contents: read
+      actions: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Cache cloudflared
+        uses: actions/cache@v4
+        id: cloudflared-cache
+        with:
+          path: /usr/local/bin/cloudflared
+          key: cloudflared-linux-amd64-v1
+
+      - name: Install Python dependencies
+        run: |
+          pip install -r app/ml-inference/requirements.txt
+          pip install flask flask-cors uvicorn
+
+      - name: Install cloudflared
+        if: steps.cloudflared-cache.outputs.cache-hit != 'true'
+        run: |
+          curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o cloudflared
+          chmod +x cloudflared
+          sudo mv cloudflared /usr/local/bin/
+
+      - name: Run services with tunnel
+        continue-on-error: true
+        run: |
+          set -e
+
+          cleanup() {
+            echo ""
+            echo "=== Shutting down ==="
+            pkill -f cloudflared || true
+            pkill -f uvicorn || true
+            pkill -f dashboard_server || true
+            exit 0
+          }
+          trap cleanup SIGTERM SIGINT
+
+          # Start ML Inference API on port 8000
+          echo "=== Starting ML Inference API ==="
+          cd app/ml-inference
+          uvicorn app:app --host 127.0.0.1 --port 8000 2>&1 | tee /tmp/api.log &
+          API_PID=$!
+          cd ../..
+          echo "API PID: $API_PID"
+
+          # Wait for API to be ready
+          for i in {1..30}; do
+            if curl -sf http://localhost:8000/health > /dev/null 2>&1; then
+              echo "API is ready"
+              break
+            fi
+            echo "Waiting for API... ($i/30)"
+            sleep 2
+          done
+
+          curl -s http://localhost:8000/health || { echo "API failed to start"; cat /tmp/api.log; exit 1; }
+
+          # Start Dashboard on port 8080
+          echo ""
+          echo "=== Starting Dashboard ==="
+          python scripts/dashboard_server.py 2>&1 | tee /tmp/dashboard.log &
+          DASHBOARD_PID=$!
+          echo "Dashboard PID: $DASHBOARD_PID"
+          sleep 3
+          curl -sf http://localhost:8080 > /dev/null && echo "Dashboard is ready" || echo "Warning: Dashboard health check failed"
+
+          # Start Cloudflare Tunnel
+          echo ""
+          echo "=== Starting Cloudflare Tunnel ==="
+          cloudflared tunnel --no-autoupdate run --token ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }} 2>&1 | tee /tmp/tunnel.log &
+          TUNNEL_PID=$!
+          echo "Tunnel PID: $TUNNEL_PID"
+          sleep 10
+
+          echo ""
+          echo "=== Tunnel Log (first 50 lines) ==="
+          head -50 /tmp/tunnel.log || true
+
+          # Calculate duration
+          HOURS="${{ github.event.inputs.duration_hours || '5.5' }}"
+          DURATION=$(echo "$HOURS * 3600" | bc | cut -d. -f1)
+          RESTART_THRESHOLD=$((DURATION - 300))
+          START_TIME=$(date +%s)
+          RESTART_TRIGGERED=false
+
+          echo ""
+          echo "=========================================="
+          echo "Services running for $HOURS hours"
+          echo "Dashboard: https://your-domain.com"
+          echo "API:       https://your-domain.com/api"
+          echo "=========================================="
+          echo ""
+
+          # Monitoring loop
+          LOOP_COUNT=0
+          while true; do
+            ELAPSED=$(($(date +%s) - START_TIME))
+            REMAINING=$((DURATION - ELAPSED))
+            LOOP_COUNT=$((LOOP_COUNT + 1))
+
+            # Health checks
+            API_OK=$(curl -sf http://localhost:8000/health > /dev/null 2>&1 && echo "OK" || echo "DOWN")
+            DASHBOARD_OK=$(curl -sf http://localhost:8080 > /dev/null 2>&1 && echo "OK" || echo "DOWN")
+            TUNNEL_OK=$(pgrep -f cloudflared > /dev/null && echo "OK" || echo "DOWN")
+
+            printf "[%s] API: %s | Dashboard: %s | Tunnel: %s | Elapsed: %dm | Remaining: %dm\n" \
+              "$(date '+%H:%M:%S')" "$API_OK" "$DASHBOARD_OK" "$TUNNEL_OK" "$((ELAPSED/60))" "$((REMAINING/60))"
+
+            # Show recent logs every 5 iterations
+            if [ $((LOOP_COUNT % 5)) -eq 0 ]; then
+              echo "--- Recent tunnel log ---"
+              tail -5 /tmp/tunnel.log 2>/dev/null || true
+              echo "-------------------------"
+            fi
+
+            # Restart API if down
+            if [ "$API_OK" = "DOWN" ]; then
+              echo "Restarting API..."
+              pkill -f "uvicorn app:app" || true
+              cd app/ml-inference
+              uvicorn app:app --host 127.0.0.1 --port 8000 2>&1 | tee -a /tmp/api.log &
+              cd ../..
+              sleep 5
+            fi
+
+            # Restart Dashboard if down
+            if [ "$DASHBOARD_OK" = "DOWN" ]; then
+              echo "Restarting Dashboard..."
+              pkill -f dashboard_server || true
+              python scripts/dashboard_server.py 2>&1 | tee -a /tmp/dashboard.log &
+              sleep 3
+            fi
+
+            # Restart Tunnel if down
+            if [ "$TUNNEL_OK" = "DOWN" ]; then
+              echo "Restarting Tunnel..."
+              cloudflared tunnel --no-autoupdate run --token ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }} 2>&1 | tee -a /tmp/tunnel.log &
+              sleep 5
+            fi
+
+            # Trigger restart before timeout
+            if [ "$ELAPSED" -gt "$RESTART_THRESHOLD" ] && [ "$RESTART_TRIGGERED" = "false" ]; then
+              if [ "${{ github.event.inputs.auto_restart }}" = "true" ]; then
+                echo "Triggering restart workflow..."
+                curl -sX POST \
+                  -H "Accept: application/vnd.github+json" \
+                  -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+                  https://api.github.com/repos/${{ github.repository }}/dispatches \
+                  -d '{"event_type":"restart-live-server"}' || true
+                RESTART_TRIGGERED=true
+              fi
+            fi
+
+            # Exit if duration reached
+            if [ "$ELAPSED" -gt "$DURATION" ]; then
+              echo "Duration reached"
+              break
+            fi
+
+            sleep 30
+          done
+
+          cleanup
+
+      - name: Show logs on failure
+        if: failure()
+        run: |
+          echo "=== API Log ==="
+          cat /tmp/api.log 2>/dev/null || echo "No API log"
+          echo ""
+          echo "=== Dashboard Log ==="
+          cat /tmp/dashboard.log 2>/dev/null || echo "No dashboard log"
+          echo ""
+          echo "=== Tunnel Log ==="
+          cat /tmp/tunnel.log 2>/dev/null || echo "No tunnel log"
+
+  notify:
+    needs: host
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Session ended
+        run: echo "Live server ended - ${{ needs.host.result }}"
