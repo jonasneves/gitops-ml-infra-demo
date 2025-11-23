@@ -118,11 +118,34 @@ Each runner could dynamically register routes via Cloudflare API. However:
 
 ### 4. Dependency Coordination
 
-**Problem:** Some components must start before others (cluster before dashboard).
+**Problem:** Some components must start before others (e.g., ML API before monitoring).
 
-**Potential solutions:**
-- `workflow_run` triggers for sequencing
-- Health check polling before dependent starts
+**Current solution:** Health check polling before dependent services start.
+
+**How it works:**
+- Monitoring runner polls ML API health endpoint
+- Waits up to 10 minutes (60 attempts × 10s)
+- Proceeds with warning if timeout reached
+- Non-blocking: doesn't prevent startup, just delays scraping
+
+**Implementation:**
+```bash
+while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+  if curl -sf -k "$ML_API_URL/health" > /dev/null 2>&1; then
+    echo "ML API is ready!"
+    break
+  fi
+  sleep 10
+done
+```
+
+**Why this works:**
+- Simple, no external dependencies
+- Graceful degradation (proceeds with warning)
+- Parallel jobs remain parallel (no `needs` dependency)
+
+**Alternative approaches:**
+- `workflow_run` triggers for strict sequencing
 - Coordinator job that orchestrates startup
 - GitHub Actions outputs passed between jobs
 
@@ -192,7 +215,7 @@ Good for: Multi-region demos, latency testing
 
 1. ~~**Solve single tunnel routing**~~ - Solved: use separate tunnels per runner
 2. ~~**Service discovery mechanism**~~ - Solved: convention-based URL derivation from `base_domain`
-3. **Dependency coordination** - Ensures reliable startup order
+3. ~~**Dependency coordination**~~ - Solved: health check polling before dependent services
 4. **Split into component workflows** - Final implementation
 
 ## Cost Considerations
