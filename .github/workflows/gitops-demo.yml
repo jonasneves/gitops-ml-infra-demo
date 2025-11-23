@@ -25,7 +25,59 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
-  # Job 1: Build Docker image (runs first, independently)
+  # Job 0: Run unit tests (runs in parallel with build)
+  unit-test:
+    name: Run Unit Tests
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Run unit tests (inference)
+        run: |
+          pytest tests/test_inference.py -v -m unit --tb=short
+
+      - name: Run API tests
+        run: |
+          pytest tests/test_api.py -v -m api --tb=short
+
+      - name: Run dashboard tests
+        run: |
+          pytest tests/test_dashboard.py -v -m dashboard --tb=short
+
+      - name: Run full test suite with coverage
+        run: |
+          pytest tests/ -v --tb=short \
+            --cov=app/ml-inference \
+            --cov=scripts \
+            --cov-report=term-missing \
+            --cov-report=xml:coverage.xml
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml
+          retention-days: 30
+
+      - name: Tests complete
+        run: |
+          echo "[OK] All unit tests passed!"
+
+  # Job 1: Build Docker image (runs in parallel with unit-test)
   build:
     name: Build ML Inference Image
     runs-on: ubuntu-22.04
@@ -81,12 +133,12 @@ jobs:
           echo "Tags: ${{ steps.meta.outputs.tags }}"
           echo "Digest: ${{ steps.build.outputs.digest }}"
 
-  # Job 2: Deploy infrastructure (depends on build)
+  # Job 2: Deploy infrastructure (depends on build and unit-test)
   deploy:
     name: Deploy Infrastructure
     runs-on: ubuntu-22.04
     timeout-minutes: 15
-    needs: build
+    needs: [build, unit-test]
 
     permissions:
       contents: read
@@ -642,7 +694,7 @@ jobs:
     name: Live Dashboard
     runs-on: ubuntu-22.04
     timeout-minutes: 25
-    needs: build
+    needs: [build, unit-test]
 
     permissions:
       contents: read
@@ -817,7 +869,7 @@ jobs:
     name: Generate Final Report
     runs-on: ubuntu-22.04
     timeout-minutes: 5
-    needs: [build, deploy, test, demo, dashboard]
+    needs: [unit-test, build, deploy, test, demo, dashboard]
     if: always()
 
     permissions:
@@ -858,9 +910,10 @@ jobs:
 
           # Add build status
           echo "### Build Status" >> /tmp/final-report/DEMO-REPORT.md
+          echo "- Unit tests: ${{ needs.unit-test.result }}" >> /tmp/final-report/DEMO-REPORT.md
           echo "- Build job: ${{ needs.build.result }}" >> /tmp/final-report/DEMO-REPORT.md
           echo "- Deploy job: ${{ needs.deploy.result }}" >> /tmp/final-report/DEMO-REPORT.md
-          echo "- Test job: ${{ needs.test.result }}" >> /tmp/final-report/DEMO-REPORT.md
+          echo "- Health checks: ${{ needs.test.result }}" >> /tmp/final-report/DEMO-REPORT.md
 
           # Add timing information
           cat >> /tmp/final-report/DEMO-REPORT.md << 'EOFF'
@@ -945,9 +998,10 @@ jobs:
           echo "║   GitOps Infrastructure Demo Complete      ║"
           echo "║                                            ║"
           echo "║   Workflow Summary:                        ║"
+          echo "║   - Unit Tests: ${{ needs.unit-test.result }}"
           echo "║   - Build: ${{ needs.build.result }}"
           echo "║   - Deploy: ${{ needs.deploy.result }}"
-          echo "║   - Test: ${{ needs.test.result }}"
+          echo "║   - Health Checks: ${{ needs.test.result }}"
           echo "║                                            ║"
           echo "║   Download artifacts for full details      ║"
           echo "║                                            ║"
