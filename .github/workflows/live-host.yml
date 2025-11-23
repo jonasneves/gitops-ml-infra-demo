@@ -160,7 +160,7 @@ jobs:
           sleep 5
 
           # Dashboard
-          python scripts/dashboard_server.py 2>&1 | tee /tmp/dashboard.log &
+          BASE_DOMAIN="${{ inputs.base_domain }}" python scripts/dashboard_server.py 2>&1 | tee /tmp/dashboard.log &
           sleep 3
 
           # Tunnel
@@ -199,7 +199,7 @@ jobs:
             # Restart if down
             [ "$ARGOCD_OK" = "DOWN" ] && { pkill -f "port-forward.*argocd" || true; kubectl port-forward svc/argocd-server -n argocd 8443:443 --address 0.0.0.0 & sleep 3; }
             [ "$API_OK" = "DOWN" ] && { pkill -f "port-forward.*ml-inference" || true; kubectl port-forward svc/ml-inference -n ml-inference 8000:80 --address 0.0.0.0 & sleep 3; }
-            [ "$DASHBOARD_OK" = "DOWN" ] && { pkill -f dashboard_server || true; python scripts/dashboard_server.py & sleep 3; }
+            [ "$DASHBOARD_OK" = "DOWN" ] && { pkill -f dashboard_server || true; BASE_DOMAIN="${{ inputs.base_domain }}" python scripts/dashboard_server.py & sleep 3; }
             [ "$TUNNEL_OK" = "DOWN" ] && { cloudflared tunnel --no-autoupdate run --token ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }} & sleep 5; }
 
             # Auto-restart before timeout
