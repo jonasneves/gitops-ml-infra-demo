@@ -6,6 +6,12 @@ import time
 import threading
 import os
 import re
+import logging
+from typing import Dict, List, Tuple, Optional, Any, Generator
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 CORS(app)
@@ -13,7 +19,7 @@ CORS(app)
 # Get base domain from environment
 BASE_DOMAIN = os.environ.get('BASE_DOMAIN', '')
 
-def get_base_domain():
+def get_base_domain() -> str:
     """Get the base domain, either from env or by detecting from request"""
     if BASE_DOMAIN:
         return BASE_DOMAIN
@@ -29,7 +35,7 @@ def get_base_domain():
 
     return ''  # Default to empty (will use localhost URLs)
 
-deployment_state = {
+deployment_state: Dict[str, Any] = {
     "start_time": time.time(),
     "argocd_apps": [],
     "pods": [],
@@ -38,29 +44,40 @@ deployment_state = {
     "phase": "Initializing"
 }
 
-def run_command(cmd):
+def run_command(cmd: str) -> str:
+    """Execute a command safely without shell=True."""
     try:
-        result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=5)
+        # Split command string into list for safe execution
+        cmd_list = cmd.split()
+        result = subprocess.run(cmd_list, capture_output=True, text=True, timeout=5, check=False)
         return result.stdout.strip()
-    except:
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
+        logger.warning(f"Command failed: {cmd} - {e}")
+        return ""
+    except Exception as e:
+        logger.error(f"Unexpected error running command {cmd}: {e}")
         return ""
 
-def get_argocd_status():
+def get_argocd_status() -> List[Dict[str, str]]:
+    """Get ArgoCD application status."""
     try:
-        output = run_command("argocd app list -o json 2>/dev/null || echo '[]'")
+        output = run_command("argocd app list -o json")
         if output and output != '[]':
             apps = json.loads(output)
             return [{"name": app.get("metadata", {}).get("name", "unknown"),
                      "sync": app.get("status", {}).get("sync", {}).get("status", "Unknown"),
                      "health": app.get("status", {}).get("health", {}).get("status", "Unknown")}
                     for app in apps]
-    except:
-        pass
+    except json.JSONDecodeError as e:
+        logger.warning(f"Failed to parse ArgoCD JSON output: {e}")
+    except Exception as e:
+        logger.error(f"Unexpected error getting ArgoCD status: {e}")
     return []
 
-def get_pods_status():
+def get_pods_status() -> List[Dict[str, str]]:
+    """Get Kubernetes pod status."""
     try:
-        output = run_command("kubectl get pods -A -o json 2>/dev/null")
+        output = run_command("kubectl get pods -A -o json")
         if output:
             data = json.loads(output)
             pods = []
@@ -75,11 +92,15 @@ def get_pods_status():
                     pods.append({"namespace": ns, "name": item["metadata"]["name"],
                                 "status": item["status"]["phase"], "ready": ready})
             return pods
-    except:
-        pass
+    except json.JSONDecodeError as e:
+        logger.warning(f"Failed to parse kubectl JSON output: {e}")
+    except (KeyError, TypeError) as e:
+        logger.warning(f"Unexpected pod data structure: {e}")
+    except Exception as e:
+        logger.error(f"Unexpected error getting pod status: {e}")
     return []
 
-def is_pod_ready(pod):
+def is_pod_ready(pod: Dict[str, str]) -> bool:
     """Check if a pod has all containers ready."""
     ready = pod["ready"]
     if ready == "0/0":
@@ -87,7 +108,7 @@ def is_pod_ready(pod):
     parts = ready.split("/")
     return parts[0] == parts[1]
 
-def get_deployment_stats(apps, pods):
+def get_deployment_stats(apps: List[Dict[str, str]], pods: List[Dict[str, str]]) -> Dict[str, int]:
     """Calculate deployment statistics."""
     return {
         "total_apps": len(apps),
@@ -98,7 +119,7 @@ def get_deployment_stats(apps, pods):
         "ready_pods": sum(1 for pod in pods if is_pod_ready(pod))
     }
 
-def calculate_progress():
+def calculate_progress() -> int:
     apps = deployment_state["argocd_apps"]
     pods = deployment_state["pods"]
     if not apps:
@@ -113,7 +134,8 @@ def calculate_progress():
 
     return min(int(score), 100)
 
-def update_state():
+def update_state() -> None:
+    """Background thread to continuously update deployment state."""
     while True:
         try:
             deployment_state["argocd_apps"] = get_argocd_status()
@@ -135,14 +157,14 @@ def update_state():
                 deployment_state["phase"] = "Waiting for Ready"
             else:
                 deployment_state["phase"] = "Deployment Complete"
-        except:
-            pass
+        except Exception as e:
+            logger.error(f"Error updating state: {e}")
         time.sleep(3)
 
 threading.Thread(target=update_state, daemon=True).start()
 
 @app.route('/')
-def index():
+def index() -> str:
     html = '''<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -815,7 +837,7 @@ graph TB
     return html
 
 @app.route('/api/status')
-def status():
+def status() -> Response:
     """Get current status as JSON"""
     elapsed = int(time.time() - deployment_state["start_time"])
     return jsonify({
@@ -825,8 +847,8 @@ def status():
     })
 
 @app.route('/api/stream')
-def stream():
-    def generate():
+def stream() -> Response:
+    def generate() -> Generator[str, None, None]:
         while True:
             elapsed = int(time.time() - deployment_state["start_time"])
             data = {**deployment_state, "elapsed": elapsed, "events": [], "start_time": None}
@@ -835,7 +857,7 @@ def stream():
     return Response(generate(), mimetype='text/event-stream')
 
 @app.route('/api/debug')
-def debug():
+def debug() -> Response:
     """Debug endpoint to see detailed pod statuses"""
     pods_detail = [{
         "name": pod["name"],
@@ -855,7 +877,7 @@ def debug():
     })
 
 @app.route('/api/badge/argocd')
-def badge_argocd():
+def badge_argocd() -> Response:
     """Badge endpoint for ArgoCD status"""
     apps = deployment_state["argocd_apps"]
     synced = sum(1 for app in apps if app["sync"] == "Synced")
@@ -882,7 +904,7 @@ def badge_argocd():
     })
 
 @app.route('/api/badge/pods')
-def badge_pods():
+def badge_pods() -> Response:
     """Badge endpoint for Pods status"""
     pods = deployment_state["pods"]
     running = sum(1 for pod in pods if pod["status"] == "Running")
@@ -910,7 +932,7 @@ def badge_pods():
     })
 
 @app.route('/api/badge/health')
-def badge_health():
+def badge_health() -> Response:
     """Badge endpoint for overall health"""
     apps = deployment_state["argocd_apps"]
     healthy = sum(1 for app in apps if app["health"] == "Healthy")
@@ -937,7 +959,7 @@ def badge_health():
     })
 
 @app.route('/api/badge/deployment')
-def badge_deployment():
+def badge_deployment() -> Response:
     """Badge endpoint for deployment progress"""
     progress = deployment_state["progress"]
 
