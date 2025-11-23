@@ -27,7 +27,7 @@ env:
 jobs:
   # Job 1: Build Docker image (runs first, independently)
   build:
-    name: 🏗️ Build ML Inference Image
+    name: Build ML Inference Image
     runs-on: ubuntu-22.04
     timeout-minutes: 10
 
@@ -40,20 +40,20 @@ jobs:
       image-digest: ${{ steps.build.outputs.digest }}
 
     steps:
-      - name: 📥 Checkout code
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: 🐳 Set up Docker Buildx
+      - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: 🔐 Log in to GitHub Container Registry
+      - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 📝 Extract metadata
+      - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
@@ -64,7 +64,7 @@ jobs:
             type=ref,event=pr
             latest
 
-      - name: 🏗️ Build and push ML inference image
+      - name: Build and push ML inference image
         id: build
         uses: docker/build-push-action@v5
         with:
@@ -75,15 +75,15 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: ✅ Build complete
+      - name: Build complete
         run: |
-          echo "✅ Docker image built and pushed successfully"
+          echo "[✓] Docker image built and pushed successfully"
           echo "Tags: ${{ steps.meta.outputs.tags }}"
           echo "Digest: ${{ steps.build.outputs.digest }}"
 
   # Job 2: Deploy infrastructure (depends on build)
   deploy:
-    name: 🚀 Deploy Infrastructure
+    name: Deploy Infrastructure
     runs-on: ubuntu-22.04
     timeout-minutes: 15
     needs: build
@@ -93,10 +93,10 @@ jobs:
       packages: read
 
     steps:
-      - name: 📥 Checkout code
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: ☸️ Start Minikube cluster
+      - name: Start Minikube cluster
         uses: medyagh/setup-minikube@latest
         with:
           driver: docker
@@ -104,7 +104,7 @@ jobs:
           memory: 4096
           addons: metrics-server,ingress
 
-      - name: 🔍 Verify cluster
+      - name: Verify cluster
         run: |
           echo "=== Cluster Info ==="
           kubectl cluster-info
@@ -116,7 +116,7 @@ jobs:
           echo -e "\n=== System Pods ==="
           kubectl get pods -n kube-system
 
-      - name: 📦 Install ArgoCD
+      - name: Install ArgoCD
         run: |
           echo "Installing ArgoCD ${{ env.ARGOCD_VERSION }}..."
 
@@ -128,39 +128,39 @@ jobs:
           kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=argocd-repo-server -n argocd --timeout=300s
           kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=argocd-application-controller -n argocd --timeout=300s
 
-          echo "✅ ArgoCD installed successfully"
+          echo "[✓] ArgoCD installed successfully"
 
-      - name: 🔑 Get ArgoCD credentials
+      - name: Get ArgoCD credentials
         id: argocd-creds
         run: |
           sleep 10
           ARGOCD_PASSWORD=$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d)
           echo "::add-mask::$ARGOCD_PASSWORD"
           echo "ARGOCD_PASSWORD=$ARGOCD_PASSWORD" >> $GITHUB_ENV
-          echo "✅ ArgoCD credentials retrieved"
+          echo "[✓] ArgoCD credentials retrieved"
 
-      - name: 🌐 Expose ArgoCD server
+      - name: Expose ArgoCD server
         run: |
           kubectl port-forward svc/argocd-server -n argocd 8080:443 > /dev/null 2>&1 &
           sleep 5
-          echo "✅ ArgoCD UI accessible at https://localhost:8080"
+          echo "[✓] ArgoCD UI accessible at https://localhost:8080"
 
-      - name: 🛠️ Install ArgoCD CLI
+      - name: Install ArgoCD CLI
         run: |
           curl -sSL -o argocd https://github.com/argoproj/argo-cd/releases/download/${{ env.ARGOCD_VERSION }}/argocd-linux-amd64
           chmod +x argocd
           sudo mv argocd /usr/local/bin/
           argocd version --client
 
-      - name: 🔐 Login to ArgoCD
+      - name: Login to ArgoCD
         run: |
           argocd login localhost:8080 \
             --username admin \
             --password $ARGOCD_PASSWORD \
             --insecure
-          echo "✅ Logged in to ArgoCD"
+          echo "[✓] Logged in to ArgoCD"
 
-      - name: 📦 Register Git repository with ArgoCD
+      - name: Register Git repository with ArgoCD
         run: |
           echo "Registering repository with ArgoCD..."
 
@@ -170,16 +170,16 @@ jobs:
             --insecure-skip-server-verification \
             --upsert
 
-          echo "✅ Repository registered with ArgoCD"
+          echo "[✓] Repository registered with ArgoCD"
 
-      - name: 🔐 Login to GHCR
+      - name: Login to GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 🐳 Setup Docker image in Minikube
+      - name: Setup Docker image in Minikube
         run: |
           echo "Pulling Docker image from GHCR..."
           docker pull ghcr.io/${{ github.repository_owner }}/ml-inference:latest
@@ -190,15 +190,15 @@ jobs:
           echo "Verifying image in Minikube..."
           minikube image ls | grep ml-inference
 
-          echo "✅ Docker image loaded into Minikube"
+          echo "[✓] Docker image loaded into Minikube"
 
-      - name: 📝 Create namespaces
+      - name: Create namespaces
         run: |
           kubectl create namespace ml-inference || true
           kubectl create namespace monitoring || true
-          echo "✅ Namespaces created"
+          echo "[✓] Namespaces created"
 
-      - name: 🚀 Deploy ML Inference via ArgoCD
+      - name: Deploy ML Inference via ArgoCD
         run: |
           echo "Creating ML Inference application..."
 
@@ -213,9 +213,9 @@ jobs:
             --auto-prune \
             --sync-option CreateNamespace=true
 
-          echo "✅ ML Inference application created"
+          echo "[✓] ML Inference application created"
 
-      - name: 📊 Deploy Observability Stack via ArgoCD
+      - name: Deploy Observability Stack via ArgoCD
         run: |
           echo "Creating Observability application..."
 
@@ -230,9 +230,9 @@ jobs:
             --auto-prune \
             --sync-option CreateNamespace=true
 
-          echo "✅ Observability application created"
+          echo "[✓] Observability application created"
 
-      - name: ⏳ Wait for applications to sync
+      - name: Wait for applications to sync
         run: |
           echo "Waiting for applications to sync..."
 
@@ -249,19 +249,19 @@ jobs:
           # Wait for health with timeout
           echo "Waiting for ml-inference to be healthy..."
           argocd app wait ml-inference --timeout 180 --health || {
-            echo "⚠️ ml-inference did not become healthy in time"
+            echo "[!] ml-inference did not become healthy in time"
             argocd app get ml-inference
           }
 
           echo "Waiting for observability to be healthy..."
           argocd app wait observability --timeout 180 --health || {
-            echo "⚠️ observability did not become healthy in time"
+            echo "[!] observability did not become healthy in time"
             argocd app get observability
           }
 
-          echo "✅ Applications sync attempted"
+          echo "[✓] Applications sync attempted"
 
-      - name: 🔍 Verify ArgoCD applications
+      - name: Verify ArgoCD applications
         run: |
           echo "=== ArgoCD Applications ==="
           argocd app list
@@ -272,7 +272,7 @@ jobs:
           echo -e "\n=== Observability App Details ==="
           argocd app get observability
 
-      - name: 🔍 Verify Kubernetes resources
+      - name: Verify Kubernetes resources
         run: |
           echo "=== All Namespaces ==="
           kubectl get namespaces
@@ -286,7 +286,7 @@ jobs:
           echo -e "\n=== ML Inference Pods ==="
           kubectl get pods -n ml-inference -o wide
 
-      - name: 💾 Save cluster state
+      - name: Save cluster state
         run: |
           mkdir -p /tmp/cluster-state
 
@@ -300,24 +300,24 @@ jobs:
           kubectl cluster-info > /tmp/cluster-state/cluster-info.txt
           kubectl get all --all-namespaces > /tmp/cluster-state/all-resources.txt
 
-      - name: 📤 Upload cluster state
+      - name: Upload cluster state
         uses: actions/upload-artifact@v4
         with:
           name: cluster-state
           path: /tmp/cluster-state/
           retention-days: 1
 
-      - name: ✅ Deployment complete
+      - name: Deployment complete
         run: |
-          echo "✅ Infrastructure deployed successfully"
-          echo "   • Minikube cluster running"
-          echo "   • ArgoCD installed and configured"
-          echo "   • ML Inference service deployed"
-          echo "   • Observability stack deployed"
+          echo "[✓] Infrastructure deployed successfully"
+          echo "   - Minikube cluster running"
+          echo "   - ArgoCD installed and configured"
+          echo "   - ML Inference service deployed"
+          echo "   - Observability stack deployed"
 
   # Job 3a: Run tests (depends on deploy, runs in parallel with demo)
   test:
-    name: 🧪 Run Health Checks & Tests
+    name: Run Health Checks & Tests
     runs-on: ubuntu-22.04
     timeout-minutes: 10
     needs: deploy
@@ -327,16 +327,16 @@ jobs:
       packages: read
 
     steps:
-      - name: 📥 Checkout code
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: 📥 Download cluster state
+      - name: Download cluster state
         uses: actions/download-artifact@v4
         with:
           name: cluster-state
           path: /tmp/cluster-state/
 
-      - name: ☸️ Start Minikube cluster
+      - name: Start Minikube cluster
         uses: medyagh/setup-minikube@latest
         with:
           driver: docker
@@ -344,39 +344,39 @@ jobs:
           memory: 4096
           addons: metrics-server,ingress
 
-      - name: 🔄 Restore cluster state
+      - name: Restore cluster state
         run: |
           # Wait for cluster to be ready
           kubectl wait --for=condition=ready node --all --timeout=300s
 
           echo "Note: Running tests on fresh cluster (cluster state is reference only)"
 
-      - name: 📦 Re-install ArgoCD
+      - name: Re-install ArgoCD
         run: |
           kubectl create namespace argocd
           kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/${{ env.ARGOCD_VERSION }}/manifests/install.yaml
           kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=argocd-server -n argocd --timeout=300s
 
-      - name: 🔑 Get ArgoCD credentials
+      - name: Get ArgoCD credentials
         run: |
           sleep 10
           ARGOCD_PASSWORD=$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d)
           echo "::add-mask::$ARGOCD_PASSWORD"
           echo "ARGOCD_PASSWORD=$ARGOCD_PASSWORD" >> $GITHUB_ENV
 
-      - name: 🛠️ Install ArgoCD CLI
+      - name: Install ArgoCD CLI
         run: |
           curl -sSL -o argocd https://github.com/argoproj/argo-cd/releases/download/${{ env.ARGOCD_VERSION }}/argocd-linux-amd64
           chmod +x argocd
           sudo mv argocd /usr/local/bin/
 
-      - name: 🔐 Login to ArgoCD
+      - name: Login to ArgoCD
         run: |
           kubectl port-forward svc/argocd-server -n argocd 8080:443 > /dev/null 2>&1 &
           sleep 5
           argocd login localhost:8080 --username admin --password $ARGOCD_PASSWORD --insecure
 
-      - name: 📦 Register Git repository with ArgoCD
+      - name: Register Git repository with ArgoCD
         run: |
           echo "Registering repository with ArgoCD..."
 
@@ -386,16 +386,16 @@ jobs:
             --insecure-skip-server-verification \
             --upsert
 
-          echo "✅ Repository registered with ArgoCD"
+          echo "[✓] Repository registered with ArgoCD"
 
-      - name: 🔐 Login to GHCR
+      - name: Login to GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 🐳 Setup Docker image in Minikube
+      - name: Setup Docker image in Minikube
         run: |
           echo "Pulling Docker image from GHCR..."
           docker pull ghcr.io/${{ github.repository_owner }}/ml-inference:latest
@@ -406,9 +406,9 @@ jobs:
           echo "Verifying image in Minikube..."
           minikube image ls | grep ml-inference
 
-          echo "✅ Docker image loaded into Minikube"
+          echo "[✓] Docker image loaded into Minikube"
 
-      - name: 🚀 Deploy applications
+      - name: Deploy applications
         run: |
           kubectl create namespace ml-inference || true
           kubectl create namespace monitoring || true
@@ -425,7 +425,7 @@ jobs:
 
           argocd app wait ml-inference --timeout 300 --health || true
 
-      - name: ✅ Run health checks
+      - name: Run health checks
         run: |
           echo "Waiting for ML inference pods to be ready..."
           kubectl wait --for=condition=ready pod -l app=ml-inference -n ml-inference --timeout=180s
@@ -463,9 +463,9 @@ jobs:
 
           kill $PF_PID || true
 
-          echo -e "\n✅ All health checks passed!"
+          echo -e "\n[✓] All health checks passed!"
 
-      - name: 📊 Collect test metrics
+      - name: Collect test metrics
         if: always()
         run: |
           mkdir -p /tmp/test-results
@@ -479,7 +479,7 @@ jobs:
           # Get events
           kubectl get events -n ml-inference --sort-by='.lastTimestamp' > /tmp/test-results/events.txt
 
-      - name: 📤 Upload test results
+      - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -487,13 +487,13 @@ jobs:
           path: /tmp/test-results/
           retention-days: 30
 
-      - name: ✅ Tests complete
+      - name: Tests complete
         run: |
-          echo "✅ All tests passed successfully!"
+          echo "[✓] All tests passed successfully!"
 
   # Job 3b: GitOps self-healing demo (depends on deploy, runs in parallel with test)
   demo:
-    name: 🎭 GitOps Self-Healing Demo
+    name: GitOps Self-Healing Demo
     runs-on: ubuntu-22.04
     timeout-minutes: 10
     needs: deploy
@@ -504,23 +504,23 @@ jobs:
       packages: read
 
     steps:
-      - name: 📥 Checkout code
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: ☸️ Start Minikube cluster
+      - name: Start Minikube cluster
         uses: medyagh/setup-minikube@latest
         with:
           driver: docker
           cpus: 2
           memory: 4096
 
-      - name: 📦 Install ArgoCD
+      - name: Install ArgoCD
         run: |
           kubectl create namespace argocd
           kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/${{ env.ARGOCD_VERSION }}/manifests/install.yaml
           kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=argocd-server -n argocd --timeout=300s
 
-      - name: 🔑 Setup ArgoCD
+      - name: Setup ArgoCD
         run: |
           sleep 10
           ARGOCD_PASSWORD=$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d)
@@ -535,7 +535,7 @@ jobs:
 
           argocd login localhost:8080 --username admin --password $ARGOCD_PASSWORD --insecure
 
-      - name: 📦 Register Git repository with ArgoCD
+      - name: Register Git repository with ArgoCD
         run: |
           echo "Registering repository with ArgoCD..."
 
@@ -545,16 +545,16 @@ jobs:
             --insecure-skip-server-verification \
             --upsert
 
-          echo "✅ Repository registered with ArgoCD"
+          echo "[✓] Repository registered with ArgoCD"
 
-      - name: 🔐 Login to GHCR
+      - name: Login to GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 🐳 Setup Docker image in Minikube
+      - name: Setup Docker image in Minikube
         run: |
           echo "Pulling Docker image from GHCR..."
           docker pull ghcr.io/${{ github.repository_owner }}/ml-inference:latest
@@ -565,9 +565,9 @@ jobs:
           echo "Verifying image in Minikube..."
           minikube image ls | grep ml-inference
 
-          echo "✅ Docker image loaded into Minikube"
+          echo "[✓] Docker image loaded into Minikube"
 
-      - name: 🚀 Deploy ML Inference
+      - name: Deploy ML Inference
         run: |
           kubectl create namespace ml-inference
 
@@ -583,7 +583,7 @@ jobs:
 
           argocd app wait ml-inference --timeout 300 --health || true
 
-      - name: 🔄 Demonstrate GitOps self-healing
+      - name: Demonstrate GitOps self-healing
         run: |
           echo "=== Demonstrating GitOps Self-Healing ==="
 
@@ -610,12 +610,12 @@ jobs:
           echo "   Replicas: $HEALED_REPLICAS"
 
           if [ "$HEALED_REPLICAS" -eq "$ORIGINAL_REPLICAS" ]; then
-            echo -e "\n✅ GitOps self-healing successful!"
+            echo -e "\n[✓] GitOps self-healing successful!"
           else
-            echo -e "\n⚠️ Self-healing still in progress..."
+            echo -e "\n[!] Self-healing still in progress..."
           fi
 
-      - name: 📸 Capture demo artifacts
+      - name: Capture demo artifacts
         if: always()
         run: |
           mkdir -p /tmp/demo-artifacts
@@ -625,7 +625,7 @@ jobs:
           kubectl get events -n ml-inference --sort-by='.lastTimestamp' > /tmp/demo-artifacts/events.txt || true
           kubectl describe deployment ml-inference -n ml-inference > /tmp/demo-artifacts/deployment-describe.txt || true
 
-      - name: 📤 Upload demo artifacts
+      - name: Upload demo artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -633,13 +633,13 @@ jobs:
           path: /tmp/demo-artifacts/
           retention-days: 30
 
-      - name: ✅ Demo complete
+      - name: Demo complete
         run: |
-          echo "✅ GitOps self-healing demonstration complete!"
+          echo "[✓] GitOps self-healing demonstration complete!"
 
   # Job 4: Live Dashboard (runs in parallel, provides public URL)
   dashboard:
-    name: 🎭 Live Dashboard
+    name: Live Dashboard
     runs-on: ubuntu-22.04
     timeout-minutes: 25
     needs: build
@@ -649,27 +649,27 @@ jobs:
       packages: read
 
     steps:
-      - name: 📥 Checkout code
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: 🐍 Setup Python
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: 📦 Install dependencies
+      - name: Install dependencies
         run: |
           pip install flask flask-cors
-          echo "✅ Python dependencies installed"
+          echo "[✓] Python dependencies installed"
 
-      - name: 🔐 Login to GHCR
+      - name: Login to GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: ☸️ Start Minikube cluster
+      - name: Start Minikube cluster
         uses: medyagh/setup-minikube@latest
         with:
           driver: docker
@@ -677,29 +677,29 @@ jobs:
           memory: 4096
           addons: metrics-server,ingress
 
-      - name: 🔍 Verify cluster
+      - name: Verify cluster
         run: |
           echo "=== Cluster Ready ==="
           kubectl cluster-info
           kubectl get nodes
-          echo "✅ Cluster is ready"
+          echo "[✓] Cluster is ready"
 
-      - name: 🐳 Load Docker image
+      - name: Load Docker image
         run: |
           echo "Pulling and loading ML inference image..."
           docker pull ghcr.io/${{ github.repository_owner }}/ml-inference:latest
           minikube image load ghcr.io/${{ github.repository_owner }}/ml-inference:latest
-          echo "✅ Image loaded into Minikube"
+          echo "[✓] Image loaded into Minikube"
 
-      - name: 📦 Install ArgoCD
+      - name: Install ArgoCD
         run: |
           echo "Installing ArgoCD..."
           kubectl create namespace argocd
           kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/${{ env.ARGOCD_VERSION }}/manifests/install.yaml
           kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=argocd-server -n argocd --timeout=300s
-          echo "✅ ArgoCD installed"
+          echo "[✓] ArgoCD installed"
 
-      - name: 🔑 Setup ArgoCD
+      - name: Setup ArgoCD
         run: |
           sleep 10
           ARGOCD_PASSWORD=$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d)
@@ -723,19 +723,19 @@ jobs:
             --insecure-skip-server-verification \
             --upsert
 
-          echo "✅ ArgoCD configured"
+          echo "[✓] ArgoCD configured"
 
-      - name: 🎨 Setup dashboard server
+      - name: Setup dashboard server
         run: |
           cp scripts/dashboard_server.py /tmp/dashboard_server.py
-          echo "✅ Dashboard server ready"
+          echo "[✓] Dashboard server ready"
 
-      - name: 🎬 Start dashboard server
+      - name: Start dashboard server
         run: |
           python3 /tmp/dashboard_server.py > /tmp/dashboard.log 2>&1 &
           sleep 3
-          curl -f http://localhost:8080/ > /dev/null && echo "✅ Dashboard running on port 8080" || {
-            echo "❌ Dashboard failed to start!"
+          curl -f http://localhost:8080/ > /dev/null && echo "[✓] Dashboard running on port 8080" || {
+            echo "[X] Dashboard failed to start!"
             echo "=== Python file content (first 50 lines) ==="
             head -50 /tmp/dashboard_server.py | cat -A
             echo ""
@@ -744,7 +744,7 @@ jobs:
             exit 1
           }
 
-      - name: 🚀 Deploy applications
+      - name: Deploy applications
         run: |
           kubectl create namespace ml-inference || true
           kubectl create namespace monitoring || true
@@ -765,21 +765,21 @@ jobs:
             --dest-namespace monitoring \
             --sync-policy automated --self-heal --auto-prune || echo "App exists"
 
-          echo "✅ Applications created"
+          echo "[✓] Applications created"
 
-      - name: 🚇 Install Cloudflare Tunnel
+      - name: Install Cloudflare Tunnel
         run: |
           wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
           chmod +x cloudflared-linux-amd64
           sudo mv cloudflared-linux-amd64 /usr/local/bin/cloudflared
           cloudflared version
 
-      - name: 🌍 Start Cloudflare Tunnel
+      - name: Start Cloudflare Tunnel
         env:
           TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
         run: |
           echo "================================================"
-          echo "🎭 STARTING LIVE GITOPS DASHBOARD"
+          echo "STARTING LIVE GITOPS DASHBOARD"
           echo "================================================"
 
           # Create tunnel credentials file
@@ -792,29 +792,29 @@ jobs:
 
           echo ""
           echo "================================================"
-          echo "🌐 LIVE DASHBOARD URL:"
+          echo "LIVE DASHBOARD URL:"
           echo "================================================"
           echo "https://gitops-infra.neevs.io"
           echo "================================================"
           echo ""
-          echo "⏰ Dashboard will remain open for 15 minutes"
+          echo "Dashboard will remain open for 15 minutes"
           echo "   Watch your GitOps deployment in real-time!"
           echo ""
 
           # Keep tunnel alive
           sleep 900  # 15 minutes
 
-      - name: 📊 Final status
+      - name: Final status
         if: always()
         run: |
           echo "=== Final Status ==="
           argocd app list || true
           kubectl get all -n ml-inference || true
-          echo "✅ Dashboard session complete"
+          echo "[✓] Dashboard session complete"
 
   # Job 5: Generate report (depends on all jobs, always runs)
   report:
-    name: 📊 Generate Final Report
+    name: Generate Final Report
     runs-on: ubuntu-22.04
     timeout-minutes: 5
     needs: [build, deploy, test, demo, dashboard]
@@ -825,34 +825,34 @@ jobs:
       pull-requests: write
 
     steps:
-      - name: 📥 Checkout code
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: 📥 Download all artifacts
+      - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: /tmp/artifacts/
 
-      - name: 📊 Generate demo report
+      - name: Generate demo report
         run: |
           mkdir -p /tmp/final-report
 
           cat > /tmp/final-report/DEMO-REPORT.md << 'EOFF'
           # GitOps Infrastructure Demo Report
 
-          ## 🎯 Demonstration Summary
+          ## Demonstration Summary
 
           This workflow successfully demonstrated:
 
-          - ✅ **Docker Build & Push** - ML inference image built and pushed to GHCR
-          - ✅ **ArgoCD GitOps deployment** - Declarative, Git-driven infrastructure
-          - ✅ **Kubernetes orchestration** - Multi-service deployment on Minikube
-          - ✅ **ML Model Serving** - FastAPI inference service with sentiment analysis
-          - ✅ **Observability Stack** - VictoriaMetrics and Grafana for monitoring
-          - ✅ **Health checks** - All services passed liveness and readiness probes
-          - ✅ **Self-healing** - ArgoCD automatic drift detection and correction
+          - [✓] **Docker Build & Push** - ML inference image built and pushed to GHCR
+          - [✓] **ArgoCD GitOps deployment** - Declarative, Git-driven infrastructure
+          - [✓] **Kubernetes orchestration** - Multi-service deployment on Minikube
+          - [✓] **ML Model Serving** - FastAPI inference service with sentiment analysis
+          - [✓] **Observability Stack** - VictoriaMetrics and Grafana for monitoring
+          - [✓] **Health checks** - All services passed liveness and readiness probes
+          - [✓] **Self-healing** - ArgoCD automatic drift detection and correction
 
-          ## 📈 Workflow Results
+          ## Workflow Results
 
           EOFF
 
@@ -865,7 +865,7 @@ jobs:
           # Add timing information
           cat >> /tmp/final-report/DEMO-REPORT.md << 'EOFF'
 
-          ## 🚀 Key Takeaways
+          ## Key Takeaways
 
           1. **Parallelized Workflow**: Build, test, and demo jobs run efficiently
           2. **GitOps in Action**: All deployments managed through Git with ArgoCD
@@ -874,30 +874,30 @@ jobs:
           5. **Self-healing**: Demonstrated automatic drift correction
           6. **Zero Cost**: Entire demo runs in GitHub Actions (no cloud account needed)
 
-          ## 📊 Architecture
+          ## Architecture
 
           ```
           GitHub Actions Workflow
           │
-          ├── Job 1: Build (🏗️)
+          ├── Job 1: Build
           │   └── Docker image → GHCR
           │
-          ├── Job 2: Deploy (🚀) [depends on Build]
+          ├── Job 2: Deploy [depends on Build]
           │   ├── Minikube cluster
           │   ├── ArgoCD installation
           │   └── Application deployment
           │
-          ├── Job 3a: Test (🧪) [parallel, depends on Deploy]
+          ├── Job 3a: Test [parallel, depends on Deploy]
           │   └── Health checks & API tests
           │
-          ├── Job 3b: Demo (🎭) [parallel, depends on Deploy]
+          ├── Job 3b: Demo [parallel, depends on Deploy]
           │   └── GitOps self-healing demo
           │
-          └── Job 4: Report (📊) [depends on all]
+          └── Job 4: Report [depends on all]
               └── Aggregate results & artifacts
           ```
 
-          ## 💡 Technologies Demonstrated
+          ## Technologies Demonstrated
 
           - **GitOps**: ArgoCD for declarative deployments
           - **Kubernetes**: Container orchestration
@@ -911,19 +911,19 @@ jobs:
 
           **Duration**: ~10-15 minutes (with parallelization)
           **Cost**: $0 (GitHub Actions free tier)
-          **Reproducible**: ✅ Anyone can run this workflow
+          **Reproducible**: [✓] Anyone can run this workflow
           EOFF
 
           cat /tmp/final-report/DEMO-REPORT.md
 
-      - name: 📤 Upload final report
+      - name: Upload final report
         uses: actions/upload-artifact@v4
         with:
           name: final-demo-report
           path: /tmp/final-report/
           retention-days: 30
 
-      - name: 📝 Comment on PR
+      - name: Comment on PR
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
         with:
@@ -938,16 +938,16 @@ jobs:
               body: `## GitOps Demo Results\n\n${report}\n\n[View full artifacts](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})`
             });
 
-      - name: ✅ Report complete
+      - name: Report complete
         run: |
           echo "╔════════════════════════════════════════════╗"
           echo "║                                            ║"
-          echo "║   ✅ GitOps Infrastructure Demo Complete   ║"
+          echo "║   GitOps Infrastructure Demo Complete      ║"
           echo "║                                            ║"
           echo "║   Workflow Summary:                        ║"
-          echo "║   • Build: ${{ needs.build.result }}"
-          echo "║   • Deploy: ${{ needs.deploy.result }}"
-          echo "║   • Test: ${{ needs.test.result }}"
+          echo "║   - Build: ${{ needs.build.result }}"
+          echo "║   - Deploy: ${{ needs.deploy.result }}"
+          echo "║   - Test: ${{ needs.test.result }}"
           echo "║                                            ║"
           echo "║   Download artifacts for full details      ║"
           echo "║                                            ║"
