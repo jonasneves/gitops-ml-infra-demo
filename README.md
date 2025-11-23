@@ -74,7 +74,6 @@ Jobs run in parallel after build completion for optimal performance.
 .
 ├── .github/workflows/
 │   ├── gitops-demo.yml              # Main GitOps workflow
-│   ├── live-gitops-dashboard.yml    # Standalone dashboard
 │   ├── live-server.yml              # Public hosting via Cloudflare
 │   └── debug-ssh-access.yml         # SSH debugging
 │
