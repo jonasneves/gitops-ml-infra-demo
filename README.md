@@ -7,6 +7,12 @@
 
 [![GitOps Demo](https://github.com/jonasneves/gitops-ml-infra-demo/actions/workflows/gitops-demo.yml/badge.svg)](https://github.com/jonasneves/gitops-ml-infra-demo/actions/workflows/gitops-demo.yml)
 
+**Live Status:**
+[![Deployment](https://img.shields.io/endpoint?url=https://gitops.neevs.io/api/badge/deployment)](https://gitops.neevs.io)
+[![ArgoCD](https://img.shields.io/endpoint?url=https://gitops.neevs.io/api/badge/argocd)](https://gitops.neevs.io)
+[![Health](https://img.shields.io/endpoint?url=https://gitops.neevs.io/api/badge/health)](https://gitops.neevs.io)
+[![Pods](https://img.shields.io/endpoint?url=https://gitops.neevs.io/api/badge/pods)](https://gitops.neevs.io)
+
 **Production-grade ML infrastructure implementing GitOps practices with ArgoCD, Kubernetes, and automated CI/CD pipelines.**
 
 Built entirely on GitHub Actions free tier, this project demonstrates modern infrastructure patterns including declarative deployments, self-healing systems, and real-time observability.
