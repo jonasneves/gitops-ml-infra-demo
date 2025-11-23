@@ -96,6 +96,16 @@ class HealthResponse(BaseModel):
     timestamp: str
 
 
+def _health_response(status: str) -> HealthResponse:
+    """Create a standardized health response."""
+    return HealthResponse(
+        status=status,
+        service="ml-inference",
+        version="1.0.0",
+        timestamp=datetime.utcnow().isoformat()
+    )
+
+
 def analyze_sentiment(text: str) -> tuple:
     """
     Simple rule-based sentiment analysis
@@ -141,23 +151,13 @@ async def root():
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
     """Health check endpoint for Kubernetes liveness probe"""
-    return HealthResponse(
-        status="healthy",
-        service="ml-inference",
-        version="1.0.0",
-        timestamp=datetime.utcnow().isoformat()
-    )
+    return _health_response("healthy")
 
 
 @app.get("/ready", response_model=HealthResponse)
 async def readiness_check():
     """Readiness check endpoint for Kubernetes readiness probe"""
-    return HealthResponse(
-        status="ready",
-        service="ml-inference",
-        version="1.0.0",
-        timestamp=datetime.utcnow().isoformat()
-    )
+    return _health_response("ready")
 
 
 @app.post("/predict", response_model=PredictionResponse)

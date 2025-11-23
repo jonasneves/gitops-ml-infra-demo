@@ -58,21 +58,38 @@ def get_pods_status():
         pass
     return []
 
+def is_pod_ready(pod):
+    """Check if a pod has all containers ready."""
+    ready = pod["ready"]
+    if ready == "0/0":
+        return False
+    parts = ready.split("/")
+    return parts[0] == parts[1]
+
+def get_deployment_stats(apps, pods):
+    """Calculate deployment statistics."""
+    return {
+        "total_apps": len(apps),
+        "synced_apps": sum(1 for app in apps if app["sync"] == "Synced"),
+        "healthy_apps": sum(1 for app in apps if app["health"] == "Healthy"),
+        "total_pods": len(pods),
+        "running_pods": sum(1 for pod in pods if pod["status"] == "Running"),
+        "ready_pods": sum(1 for pod in pods if is_pod_ready(pod))
+    }
+
 def calculate_progress():
     apps = deployment_state["argocd_apps"]
     pods = deployment_state["pods"]
     if not apps:
         return 10
-    synced = sum(1 for app in apps if app["sync"] == "Synced")
-    healthy = sum(1 for app in apps if app["health"] == "Healthy")
-    running = sum(1 for pod in pods if pod["status"] == "Running")
-    ready = sum(1 for pod in pods if pod["ready"] != "0/0" and pod["ready"].split("/")[0] == pod["ready"].split("/")[1])
 
-    # More granular scoring
-    score = (synced / max(len(apps), 1)) * 40  # 40% for sync
-    score += (healthy / max(len(apps), 1)) * 30  # 30% for health
-    score += (running / max(len(pods), 1)) * 20 if pods else 0  # 20% for running
-    score += (ready / max(len(pods), 1)) * 10 if pods else 0  # 10% for ready
+    stats = get_deployment_stats(apps, pods)
+
+    # Weighted scoring
+    score = (stats["synced_apps"] / max(len(apps), 1)) * 40
+    score += (stats["healthy_apps"] / max(len(apps), 1)) * 30
+    score += (stats["running_pods"] / max(len(pods), 1)) * 20 if pods else 0
+    score += (stats["ready_pods"] / max(len(pods), 1)) * 10 if pods else 0
 
     return min(int(score), 100)
 
@@ -211,30 +228,21 @@ def stream():
 @app.route('/api/debug')
 def debug():
     """Debug endpoint to see detailed pod statuses"""
-    pods_detail = []
-    for pod in deployment_state["pods"]:
-        pods_detail.append({
-            "name": pod["name"],
-            "namespace": pod["namespace"],
-            "status": pod["status"],
-            "ready": pod["ready"],
-            "is_running": pod["status"] == "Running",
-            "is_ready": pod["ready"] != "0/0" and pod["ready"].split("/")[0] == pod["ready"].split("/")[1]
-        })
+    pods_detail = [{
+        "name": pod["name"],
+        "namespace": pod["namespace"],
+        "status": pod["status"],
+        "ready": pod["ready"],
+        "is_running": pod["status"] == "Running",
+        "is_ready": is_pod_ready(pod)
+    } for pod in deployment_state["pods"]]
 
     return jsonify({
         "argocd_apps": deployment_state["argocd_apps"],
         "pods": pods_detail,
         "progress": deployment_state["progress"],
         "phase": deployment_state["phase"],
-        "summary": {
-            "total_apps": len(deployment_state["argocd_apps"]),
-            "synced_apps": sum(1 for app in deployment_state["argocd_apps"] if app["sync"] == "Synced"),
-            "healthy_apps": sum(1 for app in deployment_state["argocd_apps"] if app["health"] == "Healthy"),
-            "total_pods": len(deployment_state["pods"]),
-            "running_pods": sum(1 for pod in deployment_state["pods"] if pod["status"] == "Running"),
-            "ready_pods": sum(1 for pod in deployment_state["pods"] if pod["ready"] != "0/0" and pod["ready"].split("/")[0] == pod["ready"].split("/")[1])
-        }
+        "summary": get_deployment_stats(deployment_state["argocd_apps"], deployment_state["pods"])
     })
 
 if __name__ == '__main__':
