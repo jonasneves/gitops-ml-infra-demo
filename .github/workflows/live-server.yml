@@ -140,12 +140,9 @@ jobs:
             --auto-prune \
             --self-heal
 
-          # Sync applications (don't wait - let them sync in background)
-          argocd app sync ml-inference --force || true
-          argocd app sync observability --force || true
-
-          # Give apps time to start syncing
-          echo "Applications created. Waiting for initial sync..."
+          # Apps will auto-sync due to automated sync policy
+          # Give ArgoCD time to start syncing
+          echo "Applications created. Waiting for auto-sync..."
           sleep 30
 
           # Show status
