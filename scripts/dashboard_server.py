@@ -132,6 +132,23 @@ def index():
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>GitOps Infrastructure Dashboard</title>
+  <script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: 'base',
+      themeVariables: {
+        primaryColor: '#e3f2fd',
+        primaryTextColor: '#202124',
+        primaryBorderColor: '#1a73e8',
+        lineColor: '#5f6368',
+        secondaryColor: '#f1f3f4',
+        tertiaryColor: '#fafafa',
+        fontSize: '14px',
+        fontFamily: 'Google Sans, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif'
+      }
+    });
+  </script>
   <style>
     :root {
       --bg-primary: #fafafa;
@@ -329,9 +346,15 @@ def index():
       display: flex;
       align-items: center;
       justify-content: center;
-      background: var(--border-color);
+      background: var(--bg-secondary);
       border-radius: 6px;
       font-size: 14px;
+    }
+
+    .service-icon img {
+      width: 24px;
+      height: 24px;
+      object-fit: contain;
     }
 
     .service-name {
@@ -356,14 +379,16 @@ def index():
 
     /* Architecture */
     .architecture {
-      font-family: 'Roboto Mono', monospace;
-      font-size: 12px;
-      line-height: 1.6;
-      color: var(--text-secondary);
       background: var(--bg-primary);
       padding: 16px;
       border-radius: 6px;
       overflow-x: auto;
+      display: flex;
+      justify-content: center;
+    }
+
+    .mermaid {
+      background: transparent !important;
     }
 
     /* Apps and Pods Lists */
@@ -511,26 +536,41 @@ def index():
     <div class="card">
       <div class="card-header">Architecture</div>
       <div class="card-body">
-        <pre class="architecture">┌─────────────────────────────────────────────────────────────┐
-│                     Cloudflare Edge                         │
-└─────────────────────────┬───────────────────────────────────┘
-                          │
-        ┌─────────────────┴─────────────────┐
-        │                                   │
-┌───────▼───────┐                   ┌───────▼───────┐
-│  Host Runner  │                   │   Monitoring  │
-├───────────────┤                   ├───────────────┤
-│ ┌───────────┐ │                   │ VictoriaMetrics
-│ │ Minikube  │ │                   │ Grafana       │
-│ │ ┌───────┐ │ │                   └───────────────┘
-│ │ │ArgoCD │ │ │
-│ │ └───────┘ │ │
-│ │ ┌───────┐ │ │
-│ │ │ML API │ │ │
-│ │ └───────┘ │ │
-│ └───────────┘ │
-│ Dashboard     │
-└───────────────┘</pre>
+        <div class="architecture">
+          <div class="mermaid">
+graph TB
+    CF[Cloudflare Edge]
+
+    subgraph Host["Host Runner"]
+        MK[Minikube]
+        subgraph K8s["Kubernetes Cluster"]
+            AC[ArgoCD]
+            ML[ML API]
+        end
+        DASH[Dashboard]
+    end
+
+    subgraph MON["Monitoring Runner"]
+        VM[VictoriaMetrics]
+        GR[Grafana]
+    end
+
+    CF --> Host
+    CF --> MON
+    MK --> K8s
+
+    style CF fill:#f9a825,stroke:#f57f17,stroke-width:2px
+    style Host fill:#e3f2fd,stroke:#1a73e8,stroke-width:2px
+    style MON fill:#e8f5e9,stroke:#34a853,stroke-width:2px
+    style K8s fill:#f1f3f4,stroke:#5f6368,stroke-width:1px
+    style MK fill:#fff,stroke:#1a73e8,stroke-width:1px
+    style AC fill:#fff,stroke:#ff7043,stroke-width:1px
+    style ML fill:#fff,stroke:#1a73e8,stroke-width:1px
+    style DASH fill:#fff,stroke:#1a73e8,stroke-width:1px
+    style VM fill:#fff,stroke:#34a853,stroke-width:1px
+    style GR fill:#fff,stroke:#ff6f00,stroke-width:1px
+          </div>
+        </div>
       </div>
     </div>
 
@@ -559,13 +599,48 @@ def index():
   <script>
     const BASE_DOMAIN = ''' + json.dumps(BASE_DOMAIN) + ''';
 
-    // Service definitions
+    // Service definitions with logo URLs
     const services = [
-      { name: 'ArgoCD', desc: 'GitOps Controller', icon: '🔄', port: 8443, subdomain: 'argocd', https: true },
-      { name: 'ML API', desc: 'Inference Service', icon: '🤖', port: 8000, subdomain: 'ml-api', https: false },
-      { name: 'Dashboard', desc: 'This Dashboard', icon: '📊', port: 8080, subdomain: 'gitops', https: false },
-      { name: 'Grafana', desc: 'Metrics Visualization', icon: '📈', port: 3000, subdomain: 'grafana', https: false },
-      { name: 'VictoriaMetrics', desc: 'Time Series DB', icon: '💾', port: 8428, subdomain: 'metrics', https: false }
+      {
+        name: 'ArgoCD',
+        desc: 'GitOps Controller',
+        logo: 'https://cncf-branding.netlify.app/img/projects/argo/icon/color/argo-icon-color.svg',
+        port: 8443,
+        subdomain: 'argocd',
+        https: true
+      },
+      {
+        name: 'ML API',
+        desc: 'Inference Service',
+        logo: 'https://cdn.jsdelivr.net/npm/simple-icons@v11/icons/pytorch.svg',
+        port: 8000,
+        subdomain: 'ml-api',
+        https: false
+      },
+      {
+        name: 'Dashboard',
+        desc: 'This Dashboard',
+        logo: 'https://cdn.jsdelivr.net/npm/simple-icons@v11/icons/kubernetes.svg',
+        port: 8080,
+        subdomain: 'gitops',
+        https: false
+      },
+      {
+        name: 'Grafana',
+        desc: 'Metrics Visualization',
+        logo: 'https://cdn.jsdelivr.net/npm/simple-icons@v11/icons/grafana.svg',
+        port: 3000,
+        subdomain: 'grafana',
+        https: false
+      },
+      {
+        name: 'VictoriaMetrics',
+        desc: 'Time Series DB',
+        logo: 'https://docs.victoriametrics.com/logo.png',
+        port: 8428,
+        subdomain: 'metrics',
+        https: false
+      }
     ];
 
     // Render service registry
@@ -584,7 +659,7 @@ def index():
         return `
           <div class="service-item">
             <div class="service-info">
-              <div class="service-icon">${svc.icon}</div>
+              <div class="service-icon"><img src="${svc.logo}" alt="${svc.name}" onerror="this.style.display='none'"/></div>
               <div>
                 <div class="service-name">${svc.name}</div>
                 <div class="service-desc">${svc.desc}</div>
