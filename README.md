@@ -27,6 +27,8 @@ Built entirely on GitHub Actions free tier, this project demonstrates modern inf
 
 ## Architecture
 
+![Architecture](architecture.png)
+
 ```mermaid
 graph TB
     subgraph GitHub["GitHub Actions Runner"]
