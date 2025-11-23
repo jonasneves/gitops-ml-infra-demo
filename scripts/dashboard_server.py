@@ -647,13 +647,15 @@ graph TB
     function renderServices() {
       const container = document.getElementById('serviceRegistry');
       container.innerHTML = services.map(svc => {
-        let url;
+        let url, displayUrl;
         if (BASE_DOMAIN) {
-          const protocol = svc.https ? 'https' : 'https';
+          const protocol = svc.https ? 'https' : 'http';
           url = `${protocol}://${svc.subdomain}.${BASE_DOMAIN}`;
+          displayUrl = url; // Show full URL with protocol when using custom domain
         } else {
           const protocol = svc.https ? 'https' : 'http';
           url = `${protocol}://localhost:${svc.port}`;
+          displayUrl = `localhost:${svc.port}`; // Show cleaner format for localhost
         }
 
         return `
@@ -665,7 +667,7 @@ graph TB
                 <div class="service-desc">${svc.desc}</div>
               </div>
             </div>
-            <a href="${url}" target="_blank" class="service-url">${url.replace('https://', '').replace('http://', '')}</a>
+            <a href="${url}" target="_blank" class="service-url">${displayUrl}</a>
           </div>
         `;
       }).join('');
