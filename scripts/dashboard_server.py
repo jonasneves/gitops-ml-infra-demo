@@ -297,31 +297,23 @@ def index():
       background: var(--success);
     }
 
-    /* Stats Grid */
-    .stats-grid {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 16px;
+    /* Status Badges */
+    .status-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
       margin-bottom: 24px;
+      align-items: center;
     }
 
-    .stat-card {
-      background: var(--bg-secondary);
-      border: 1px solid var(--border-color);
-      border-radius: 8px;
-      padding: 16px;
+    .status-badge {
+      display: inline-block;
+      height: 20px;
     }
 
-    .stat-label {
-      font-size: 12px;
-      color: var(--text-secondary);
-      margin-bottom: 4px;
-    }
-
-    .stat-value {
-      font-size: 24px;
-      font-weight: 400;
-      color: var(--text-primary);
+    .status-badge img {
+      height: 20px;
+      vertical-align: middle;
     }
 
     /* Service Registry */
@@ -493,7 +485,7 @@ def index():
     }
 
     @media (max-width: 768px) {
-      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+      .status-badges { justify-content: center; }
       .two-col { grid-template-columns: 1fr; }
     }
   </style>
@@ -528,24 +520,20 @@ def index():
       </div>
     </div>
 
-    <!-- Stats -->
-    <div class="stats-grid">
-      <div class="stat-card">
-        <div class="stat-label">Applications</div>
-        <div class="stat-value" id="appCount">0</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Total Pods</div>
-        <div class="stat-value" id="podCount">0</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Running</div>
-        <div class="stat-value" id="runningPods">0</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Ready</div>
-        <div class="stat-value" id="readyPods">0</div>
-      </div>
+    <!-- Status Badges -->
+    <div class="status-badges">
+      <a class="status-badge" id="deploymentBadge" href="#" title="Deployment Status">
+        <img src="" alt="Deployment Status">
+      </a>
+      <a class="status-badge" id="argocdBadge" href="#" title="ArgoCD Status">
+        <img src="" alt="ArgoCD Status">
+      </a>
+      <a class="status-badge" id="healthBadge" href="#" title="Health Status">
+        <img src="" alt="Health Status">
+      </a>
+      <a class="status-badge" id="podsBadge" href="#" title="Pods Status">
+        <img src="" alt="Pods Status">
+      </a>
     </div>
 
     <!-- Service Registry -->
@@ -712,6 +700,30 @@ graph TB
 
     renderServices();
 
+    // Update status badges
+    function updateBadges() {
+      const baseUrl = window.location.origin;
+
+      // Update each badge
+      document.querySelector('#deploymentBadge img').src =
+        `https://img.shields.io/endpoint?url=${encodeURIComponent(baseUrl + '/api/badge/deployment')}`;
+
+      document.querySelector('#argocdBadge img').src =
+        `https://img.shields.io/endpoint?url=${encodeURIComponent(baseUrl + '/api/badge/argocd')}`;
+
+      document.querySelector('#healthBadge img').src =
+        `https://img.shields.io/endpoint?url=${encodeURIComponent(baseUrl + '/api/badge/health')}`;
+
+      document.querySelector('#podsBadge img').src =
+        `https://img.shields.io/endpoint?url=${encodeURIComponent(baseUrl + '/api/badge/pods')}`;
+    }
+
+    // Initial badge update
+    updateBadges();
+
+    // Update badges every 3 seconds
+    setInterval(updateBadges, 3000);
+
     // SSE connection
     const eventSource = new EventSource('/api/stream');
 
@@ -733,19 +745,6 @@ graph TB
       const mins = Math.floor(data.elapsed / 60);
       const secs = data.elapsed % 60;
       document.getElementById('elapsed').textContent = `Elapsed: ${mins}m ${secs}s`;
-
-      // Stats
-      document.getElementById('appCount').textContent = data.argocd_apps.length;
-      document.getElementById('podCount').textContent = data.pods.length;
-
-      const running = data.pods.filter(p => p.status === 'Running').length;
-      const ready = data.pods.filter(p => {
-        const parts = p.ready.split('/');
-        return parts[0] === parts[1] && parts[0] !== '0';
-      }).length;
-
-      document.getElementById('runningPods').textContent = running;
-      document.getElementById('readyPods').textContent = ready;
 
       // Apps list
       const appsContainer = document.getElementById('appsList');
@@ -834,6 +833,113 @@ def debug():
         "progress": deployment_state["progress"],
         "phase": deployment_state["phase"],
         "summary": get_deployment_stats(deployment_state["argocd_apps"], deployment_state["pods"])
+    })
+
+@app.route('/api/badge/argocd')
+def badge_argocd():
+    """Badge endpoint for ArgoCD status"""
+    apps = deployment_state["argocd_apps"]
+    synced = sum(1 for app in apps if app["sync"] == "Synced")
+    total = len(apps)
+
+    if total == 0:
+        color = "inactive"
+        message = "No Apps"
+    elif synced == total:
+        color = "success"
+        message = f"{synced}/{total} Synced"
+    elif synced > 0:
+        color = "yellow"
+        message = f"{synced}/{total} Synced"
+    else:
+        color = "critical"
+        message = f"{synced}/{total} Synced"
+
+    return jsonify({
+        "schemaVersion": 1,
+        "label": "ArgoCD",
+        "message": message,
+        "color": color
+    })
+
+@app.route('/api/badge/pods')
+def badge_pods():
+    """Badge endpoint for Pods status"""
+    pods = deployment_state["pods"]
+    running = sum(1 for pod in pods if pod["status"] == "Running")
+    ready = sum(1 for pod in pods if is_pod_ready(pod))
+    total = len(pods)
+
+    if total == 0:
+        color = "inactive"
+        message = "No Pods"
+    elif ready == total:
+        color = "success"
+        message = f"{ready}/{total} Ready"
+    elif running > 0:
+        color = "yellow"
+        message = f"{ready}/{total} Ready"
+    else:
+        color = "critical"
+        message = f"{ready}/{total} Ready"
+
+    return jsonify({
+        "schemaVersion": 1,
+        "label": "Pods",
+        "message": message,
+        "color": color
+    })
+
+@app.route('/api/badge/health')
+def badge_health():
+    """Badge endpoint for overall health"""
+    apps = deployment_state["argocd_apps"]
+    healthy = sum(1 for app in apps if app["health"] == "Healthy")
+    total = len(apps)
+
+    if total == 0:
+        color = "inactive"
+        message = "Unknown"
+    elif healthy == total:
+        color = "success"
+        message = "Healthy"
+    elif healthy > 0:
+        color = "yellow"
+        message = f"{healthy}/{total} Healthy"
+    else:
+        color = "critical"
+        message = "Unhealthy"
+
+    return jsonify({
+        "schemaVersion": 1,
+        "label": "Health",
+        "message": message,
+        "color": color
+    })
+
+@app.route('/api/badge/deployment')
+def badge_deployment():
+    """Badge endpoint for deployment progress"""
+    progress = deployment_state["progress"]
+
+    if progress >= 100:
+        color = "success"
+        message = "Complete"
+    elif progress >= 70:
+        color = "yellow"
+        message = f"{progress}%"
+    elif progress >= 30:
+        color = "orange"
+        message = f"{progress}%"
+    else:
+        color = "blue"
+        message = f"{progress}%"
+
+    return jsonify({
+        "schemaVersion": 1,
+        "label": "Deployment",
+        "message": message,
+        "color": color
     })
 
 if __name__ == '__main__':
