@@ -3,6 +3,7 @@ Lightweight ML Inference Service for GitOps Demo
 A simple sentiment analysis API using rule-based classification
 """
 
+import re
 import time
 import logging
 from typing import List
@@ -112,7 +113,8 @@ def analyze_sentiment(text: str) -> tuple:
     Returns: (sentiment, confidence)
     """
     text_lower = text.lower()
-    words = set(text_lower.split())
+    # Extract only alphabetic words, removing punctuation
+    words = set(re.findall(r'\b[a-z]+\b', text_lower))
 
     positive_count = len(words & POSITIVE_WORDS)
     negative_count = len(words & NEGATIVE_WORDS)
