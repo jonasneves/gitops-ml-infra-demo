@@ -55,7 +55,7 @@ jobs:
 
   notify:
     needs: [host, monitoring]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     if: always()
     steps:
       - name: Session ended

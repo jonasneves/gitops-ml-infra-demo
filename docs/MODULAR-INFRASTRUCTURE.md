@@ -262,7 +262,7 @@ Good for: Stateless API servers, load testing
 ### Vertical Scaling (Bigger Runner)
 
 ```yaml
-runs-on: ubuntu-latest-16-cores
+runs-on: ubuntu-24.04-arm-16-cores
 ```
 
 Good for: Build jobs, resource-intensive workloads
